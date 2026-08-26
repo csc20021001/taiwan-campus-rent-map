@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const universities = sqliteTable('universities', {
   id: text('id').primaryKey(),
@@ -11,11 +11,35 @@ export const universities = sqliteTable('universities', {
   address: text('address').notNull(),
 });
 
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  googleSub: text('google_sub').notNull(),
+  email: text('email').notNull(),
+  name: text('name').notNull(),
+  avatarUrl: text('avatar_url'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_users_google_sub').on(table.googleSub),
+  index('idx_users_email').on(table.email),
+]);
+
+export const authSessions = sqliteTable('auth_sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: text('expires_at').notNull(),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_auth_sessions_user_expires').on(table.userId, table.expiresAt),
+]);
+
 export const listings = sqliteTable('listings', {
   id: text('id').primaryKey(),
-  universityId: text('university_id').notNull().references(() => universities.id),
+  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'restrict' }),
+  ownerUserId: text('owner_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   title: text('title').notNull(),
   address: text('address').notNull(),
+  description: text('description').notNull(),
   monthlyRent: integer('monthly_rent').notNull(),
   roomType: text('room_type').notNull(),
   areaPing: real('area_ping').notNull(),
@@ -23,17 +47,19 @@ export const listings = sqliteTable('listings', {
   latitude: real('latitude').notNull(),
   longitude: real('longitude').notNull(),
   highlights: text('highlights', { mode: 'json' }).$type<string[]>().notNull(),
-  featured: integer('featured', { mode: 'boolean' }).notNull().default(false),
-  seedRating: real('seed_rating').notNull().default(0),
-  seedReviewCount: integer('seed_review_count').notNull().default(0),
+  contactMethod: text('contact_method').notNull(),
+  contactValue: text('contact_value').notNull(),
+  status: text('status').notNull().default('published'),
   createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
 }, (table) => [
-  index('idx_listings_university_id').on(table.universityId),
+  index('idx_listings_university_status').on(table.universityId, table.status),
+  index('idx_listings_owner_created').on(table.ownerUserId, table.createdAt),
 ]);
 
 export const reviews = sqliteTable('reviews', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  listingId: text('listing_id').notNull().references(() => listings.id),
+  listingId: text('listing_id').notNull().references(() => listings.id, { onDelete: 'cascade' }),
   authorName: text('author_name').notNull(),
   rating: integer('rating').notNull(),
   content: text('content').notNull(),

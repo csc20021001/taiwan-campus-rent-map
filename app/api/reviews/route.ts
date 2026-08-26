@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensureDatabase, getD1 } from '@/db';
+import { isSameOriginRequest } from '@/app/auth/server';
 import { validateReview } from './validation.mjs';
 
 type ReviewRow = { id: number; author_name: string; rating: number; content: string; created_at: string };
@@ -29,6 +30,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isSameOriginRequest(request)) return NextResponse.json({ error: '不允許跨站留言。' }, { status: 403 });
   let body: unknown;
   try {
     body = await request.json();

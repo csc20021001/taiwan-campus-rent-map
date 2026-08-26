@@ -9,7 +9,8 @@ if (!databaseFile) throw new Error('找不到本機 D1 SQLite；請先執行 npm
 
 const database = new DatabaseSync(join(databaseDirectory, databaseFile), { readOnly: true });
 const indexes = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
-const listingPlan = database.prepare('EXPLAIN QUERY PLAN SELECT * FROM listings WHERE university_id = ?').all('ntu');
-const reviewPlan = database.prepare('EXPLAIN QUERY PLAN SELECT * FROM reviews WHERE listing_id = ? ORDER BY created_at DESC').all('ntu-01');
+const counts = database.prepare('SELECT (SELECT COUNT(*) FROM listings) AS listings, (SELECT COUNT(*) FROM reviews) AS reviews, (SELECT COUNT(*) FROM users) AS users').get();
+const listingPlan = database.prepare("EXPLAIN QUERY PLAN SELECT * FROM listings WHERE university_id = ? AND status = 'published'").all('ntu');
+const sessionPlan = database.prepare('EXPLAIN QUERY PLAN SELECT * FROM auth_sessions WHERE user_id = ? AND expires_at > ?').all('user-id', new Date().toISOString());
 
-console.log(JSON.stringify({ indexes, listingPlan, reviewPlan }, null, 2));
+console.log(JSON.stringify({ indexes, counts, listingPlan, sessionPlan }, null, 2));
