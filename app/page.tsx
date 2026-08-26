@@ -1,5 +1,5 @@
-import { CampusExplorer } from './campus-explorer';
+import { RentalExplorer } from './rental-explorer';
 
 export default function Home() {
-  return <CampusExplorer />;
+  return <RentalExplorer />;
 }

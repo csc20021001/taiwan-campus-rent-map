@@ -1,92 +1,127 @@
 # 校邊 Campus Nest
 
-以地圖為核心的臺灣國立大學周邊租屋探索平台。使用者可以切換學校、查看步行範圍內的租屋資訊、使用快速條件篩選，並針對每筆租屋留下公開留言與 1–5 星評分。網站不預載任何範例房源，只顯示會員刊登或由使用者明確提供、經站方代登的實際資訊。
+以地圖為核心的臺灣國立大學周邊租屋地點與匿名聚合回報平台。網站不是招租廣告平台：不保存房東電話、即時空房、押金、契約或房間照片；使用者登入後可新增「有人住過的地點」，並回報自己實際支付的月租與 1～5 分住過評分。
 
-## 首批支援學校
+## MVP 功能
 
-- 國立臺灣大學、國立清華大學、國立陽明交通大學、國立成功大學
-- 國立中央大學、國立中興大學、國立中正大學、國立中山大學
-- 國立臺灣科技大學、國立臺北科技大學、國立宜蘭大學
+- 11 所學校：臺大、清大、陽明交大、成大、中央、中興、中山、中正、臺科、北科、宜大
+- MapLibre GL JS + OpenStreetMap／Protomaps PMTiles 極簡底圖，不需要商業地圖 API 金鑰
+- Marker、地址、租金與評分全部由 Cloudflare D1 提供
+- 52 個政府資料去重後地點、55 筆學校關聯，以及 1 個管理員建立的宜蘭地點
+- 政府歷史租賃參考與使用者回報平均／中位數嚴格分開
+- Google OpenID Connect、PKCE、HttpOnly 工作階段
+- 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
+- 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
+- 教授搜尋及「好不好過」1～5 分評分；第一版不提供自由文字留言
+- AdSense 版位、隱私權政策、服務條款與 `ads.txt`
 
-## 已完成功能
-
-- OpenStreetMap 資料 + Protomaps PMTiles + MapLibre GL JS，不需要地圖 API 金鑰
-- 校園專用極簡底圖：保留道路、水域、綠地與建物輪廓，移除商家、景點、POI 與一般地名標籤
-- 11 所學校快速切換與校園／租屋圖標
-- Google OpenID Connect 登入、HttpOnly 工作階段與登出
-- 登入會員可在地圖選點並刊登地址、租金、房型、坪數、特色及聯絡方式
-- 支援站方代登資訊不完整的真實房源；未知租金、房型或坪數會顯示「洽詢」，不建立虛構數值
-- 租金、房型、坪數、步行時間、特色與評分資訊
-- 套房、萬元以下、可開伙快速篩選
-- 公開留言與 1–5 星評分，包含伺服器端輸入驗證
-- 響應式桌面側欄與手機底部面板
-- SQLite / Cloudflare D1 相容資料表、索引與 migrations
-- Open Graph 品牌分享圖與中文無障礙標示
-- Google OAuth 與 AdSense 可公開引用的隱私權政策、服務條款頁面
-- AdSense 響應式廣告版位、站點驗證 meta 與動態 `ads.txt`（未設定帳號時安全顯示預留版位）
-
-## 地圖資料與商業使用
-
-前端以 MapLibre GL JS 顯示 PMTiles 向量地圖，樣式只引用 `earth`、`landuse`、`water`、`buildings` 與 `roads` 圖層，刻意不載入 `places`、`pois` 或任何 `symbol` 標籤層。校名與租屋價格由本站自己的資料與 Marker 呈現，所以地圖不會被餐廳、商店、景點及次要地名淹沒。
-
-預設 PMTiles 來源是 Protomaps 在 Source Cooperative 發布的公開 OSM Produced Work，適合本機開發與功能驗證。正式營運時請將臺灣範圍的 `.pmtiles` 放到自有 Cloudflare R2（搭配自訂網域與 CORS），並透過 `NEXT_PUBLIC_PMTILES_URL` 切換，避免長期熱連結公共資料站。畫面右下角會保留 OpenStreetMap contributors 與 Protomaps 的可見署名。
-
-## AdSense 設定
-
-複製 `.env.example` 為 `.env.local`，填入自己的 AdSense 資訊：
-
-```dotenv
-NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-1234567890123456
-NEXT_PUBLIC_ADSENSE_SLOT=1234567890
-```
-
-未填或格式不正確時，不會下載 Google 廣告程式，只顯示清楚標記、不遮擋內容的預留版位。設定完成後，全站會載入 AdSense、加入 `google-adsense-account` 驗證 meta，並在 `/ads.txt` 輸出對應 publisher 紀錄。AdSense 必須另外通過 Google 的站點審查；目前私有預覽站不適合送審，正式申請前需要公開可供 Google 檢索的網域與完整內容政策頁。
-
-## 資料儲存策略
-
-開發環境由 Wrangler/Miniflare 將 D1 以專案內的本機 SQLite 檔案儲存於 `.wrangler/`，不用另裝資料庫伺服器；此資料夾已排除於 Git。部署環境使用 Cloudflare D1，沿用相同 SQLite schema 與 query，不需要改寫後端。
-
-資料表：
-
-- `universities`：學校與校區座標
-- `users`：Google 帳號的公開基本資料，以 Google `sub` 作唯一識別
-- `auth_sessions`：雜湊後的登入工作階段與到期時間
-- `listings`：會員所有權、租屋資訊、聯絡方式與地圖座標
-- `reviews`：使用者暱稱、評分、留言與建立時間
-
-常用查詢已有 `(university_id, status)`、`(owner_user_id, created_at)`、`(listing_id, created_at)` 與 `(user_id, expires_at)` 索引。資料表會在首次 API 請求時安全初始化，只匯入學校清單，不會匯入房源或留言；`drizzle/` 保留可部署的 SQL migrations。
-
-## Google 登入設定
-
-在 Google Cloud Console 建立「Web application」OAuth 2.0 Client，加入以下 Authorized redirect URI：
+## Cloudflare 架構
 
 ```text
-http://localhost:3000/api/auth/google/callback
-https://xiaobian-campus-nest.sjehd363960.chatgpt.site/api/auth/google/callback
+Vinext / Next.js UI + 靜態資產
+              ↓
+Cloudflare Worker（頁面與 REST API）
+              ↓
+Cloudflare D1
+
+MapLibre → PMTiles / OSM Produced Work（只作底圖）
+Google OAuth → users / auth_sessions（不保存 Google token）
 ```
 
-接著複製 `.env.example` 為 `.env.local`，填入：
+本專案沿用既有 Vinext 全端架構，由同一個 Cloudflare Worker 提供 React 頁面、靜態資產與 API。Cloudflare Pages 適合 Next.js 靜態匯出；需要 SSR、OAuth callback 與 D1 API 的 Next.js 專案，Cloudflare現行文件建議部署到 Workers。這樣不需拆成兩個站點，也能保留相同網域 Cookie 與同源防護。
+
+第一版沒有圖片上傳，因此 `.openai/hosting.json` 的 R2 binding 保持 `null`。未來新增圖片時只把 object key／metadata 放在 D1，圖片 binary 放 R2。
+
+## D1 資料模型
+
+- `universities`：學校與校區座標
+- `users`：內部使用者、唯一 `google_sub`；Email 不公開
+- `auth_sessions`：工作階段 token 的 SHA-256 雜湊
+- `professors`、`professor_ratings`：教授基本資料與唯一 `(user_id, professor_id)` 評分
+- `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
+- `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
+- `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
+- `api_rate_limits`：以使用者、動作、時間窗計數的基本濫用防護
+
+舊版 `listings`／`reviews` 資料表與 API 仍保留以避免破壞既有資料，但新版 UI 不再使用房東聯絡方式或自由留言。所有舊版寫入也已要求登入與限流。
+
+### 租金統計
+
+使用者平均、中位數、回報人數與評分只讀取 `rental_reports` 中 `is_valid = 1 AND is_outlier = 0` 的資料。`rental_locations.reference_rent` 只顯示為「政府歷史租賃參考」，永遠不加入統計。API 接受月租 1,000～200,000 元；至少有 5 個既有有效回報後，低於中位數 0.4 倍或高於 2.5 倍的新值會保留原始紀錄，但標記為 `is_outlier`。
+
+## REST API
+
+| Method | Path | 說明 |
+|---|---|---|
+| GET | `/api/universities` | D1 學校清單 |
+| GET | `/api/rentals?university_id=...&north=...&south=...&east=...&west=...` | 學校／地圖範圍內地點 |
+| GET | `/api/rentals/:id` | 地址、平均、中位數、評分與參考租金 |
+| POST | `/api/rentals` | 登入後新增或導向既有地點 |
+| POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
+| GET | `/api/professors` | `university_id`、`department`、`search` 篩選 |
+| GET | `/api/professors/:id` | 教授平均評分與人數 |
+| POST | `/api/professors/:id/rating` | 登入後 UPSERT 好不好過評分 |
+
+## 環境變數
+
+複製 `.env.example` 為 `.env.local`：
 
 ```dotenv
 GOOGLE_CLIENT_ID=你的-client-id
 GOOGLE_CLIENT_SECRET=你的-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+
+NEXT_PUBLIC_PMTILES_URL=https://data.source.coop/protomaps/openstreetmap/v4.pmtiles
+NEXT_PUBLIC_ADSENSE_CLIENT=
+NEXT_PUBLIC_ADSENSE_SLOT=
 ```
 
-正式部署時必須將三個值設成平台的伺服器端環境變數，並把 `GOOGLE_REDIRECT_URI` 換成正式網址。Client Secret 不可使用 `NEXT_PUBLIC_` 前綴，也不可提交到 Git。未設定金鑰時網站仍可瀏覽，但登入與刊登按鈕會清楚顯示尚未啟用。
+正式 Google OAuth redirect URI：
 
-登入流程使用 OAuth `state`、PKCE、Google JWKS 驗證 ID token 的簽章、issuer、audience 與期限。瀏覽器只保存 `HttpOnly`、`Secure`、`SameSite=Lax` 的隨機 session token，D1 只保存其 SHA-256 雜湊，不保存 Google access token 或 refresh token。刊登 API 另有同源請求與伺服器端欄位驗證。
+```text
+https://xiaobian-campus-nest.sjehd363960.chatgpt.site/api/auth/google/callback
+```
 
-## 本機執行
+Client Secret 只能設定為 Worker／Sites 伺服器環境變數，不可使用 `NEXT_PUBLIC_` 前綴，也不可提交 Git。登入流程驗證 `state`、PKCE、Google JWKS、issuer、audience 與 Email verified；D1 不保存 access token、refresh token 或 Google 密碼。
 
-需求：Node.js 22.13 以上。
+## 本機開發
+
+需求為 Node.js 22.13 以上。
 
 ```bash
 npm install
 npm run dev
 ```
 
-開啟 `http://localhost:3000`。首次讀取房源時會自動建立本機 SQLite 資料。若尚未設定 Google OAuth，可先驗證地圖、空狀態與公開讀取 API；建立刊登需要完成登入。
+開啟 `http://localhost:3000`。Vinext + Miniflare 會把 D1 的本機 SQLite 放在 `.wrangler/`；首次 API 請求也會以冪等方式建立資料表並匯入學校與租屋地點，不需另裝 SQL server。
+
+## Migrations 與 seed
+
+- `drizzle/0004_cloudflare_core.sql`：教授、租屋地點、回報、限流、UNIQUE constraints 與 indexes
+- `drizzle/0005_seed_government_rentals.sql`：本次 55 筆輸入去重後的 D1 初始地點
+- `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
+- `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入未來提供的教授姓名、系所與學校
+
+```bash
+npm run seed:build
+```
+
+Sites 部署會把 `drizzle/` 一併打包並依 journal 套用 D1 migration。若使用自己的 Cloudflare 帳號與 Wrangler，先建立 D1、設定 `DB` binding，然後執行：
+
+```bash
+npx wrangler d1 migrations apply <DATABASE_NAME> --local
+npx wrangler d1 migrations apply <DATABASE_NAME> --remote
+```
+
+教授 JSON 格式：
+
+```json
+[
+  { "id": "ntu-cs-example", "universityId": "ntu", "department": "資訊工程學系", "name": "王教授" }
+]
+```
+
+目前使用者沒有提供教授名單，因此不製造姓名；教授表、API、搜尋、評分與空狀態均已完成。
 
 ## 品質檢查
 
@@ -98,6 +133,8 @@ npm run build
 npm audit
 ```
 
-## 技術組合
+Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 個不重複地點、56 筆學校關聯、唯一評分／回報限制，以及政府參考租金沒有成為使用者回報。
 
-Vinext / Next.js App Router、React、TypeScript、MapLibre GL JS、PMTiles、OpenStreetMap、Cloudflare D1、Drizzle ORM、Cloudflare Workers。
+## 地圖授權
+
+畫面保留 OpenStreetMap contributors 與 Protomaps 署名。正式高流量營運建議把臺灣範圍 `.pmtiles` 放到自有 R2 或其他自有服務，並以 `NEXT_PUBLIC_PMTILES_URL` 切換；不要長期熱連結公共示範 archive。租屋 Marker 完全來自 D1，不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。

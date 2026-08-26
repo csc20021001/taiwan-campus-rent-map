@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const universities = sqliteTable('universities', {
   id: text('id').primaryKey(),
@@ -9,6 +9,7 @@ export const universities = sqliteTable('universities', {
   latitude: real('latitude').notNull(),
   longitude: real('longitude').notNull(),
   address: text('address').notNull(),
+  createdAt: text('created_at'),
 });
 
 export const users = sqliteTable('users', {
@@ -66,4 +67,88 @@ export const reviews = sqliteTable('reviews', {
   createdAt: text('created_at').notNull(),
 }, (table) => [
   index('idx_reviews_listing_created').on(table.listingId, table.createdAt),
+]);
+
+export const professors = sqliteTable('professors', {
+  id: text('id').primaryKey(),
+  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  department: text('department').notNull(),
+  name: text('name').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_professors_university').on(table.universityId),
+  index('idx_professors_department').on(table.department),
+  index('idx_professors_name').on(table.name),
+  uniqueIndex('idx_professors_identity').on(table.universityId, table.department, table.name),
+]);
+
+export const professorRatings = sqliteTable('professor_ratings', {
+  id: text('id').primaryKey(),
+  professorId: text('professor_id').notNull().references(() => professors.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  easyToPassScore: integer('easy_to_pass_score').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_professor_ratings_professor').on(table.professorId),
+  index('idx_professor_ratings_user').on(table.userId),
+  uniqueIndex('idx_professor_ratings_user_professor').on(table.userId, table.professorId),
+]);
+
+export const rentalLocations = sqliteTable('rental_locations', {
+  id: text('id').primaryKey(),
+  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'restrict' }),
+  address: text('address').notNull(),
+  normalizedAddress: text('normalized_address').notNull(),
+  latitude: real('latitude'),
+  longitude: real('longitude'),
+  source: text('source').notNull(),
+  referenceRent: integer('reference_rent'),
+  referenceRentSource: text('reference_rent_source'),
+  coordinateSource: text('coordinate_source'),
+  coordinatesVerified: integer('coordinates_verified', { mode: 'boolean' }).notNull().default(false),
+  createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_rental_locations_normalized_address').on(table.normalizedAddress),
+  index('idx_rental_locations_university').on(table.universityId),
+  index('idx_rental_locations_coordinates').on(table.latitude, table.longitude),
+]);
+
+export const rentalLocationUniversities = sqliteTable('rental_location_universities', {
+  rentalLocationId: text('rental_location_id').notNull().references(() => rentalLocations.id, { onDelete: 'cascade' }),
+  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.rentalLocationId, table.universityId] }),
+  index('idx_rental_location_universities_university').on(table.universityId, table.rentalLocationId),
+]);
+
+export const rentalReports = sqliteTable('rental_reports', {
+  id: text('id').primaryKey(),
+  rentalLocationId: text('rental_location_id').notNull().references(() => rentalLocations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  monthlyRent: integer('monthly_rent').notNull(),
+  overallRating: integer('overall_rating').notNull(),
+  isValid: integer('is_valid', { mode: 'boolean' }).notNull().default(true),
+  isOutlier: integer('is_outlier', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_rental_reports_location').on(table.rentalLocationId),
+  index('idx_rental_reports_user').on(table.userId),
+  uniqueIndex('idx_rental_reports_user_location').on(table.userId, table.rentalLocationId),
+]);
+
+export const apiRateLimits = sqliteTable('api_rate_limits', {
+  userId: text('user_id').notNull(),
+  action: text('action').notNull(),
+  windowStartedAt: integer('window_started_at').notNull(),
+  requestCount: integer('request_count').notNull().default(1),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.action, table.windowStartedAt] }),
+  index('idx_api_rate_limits_cleanup').on(table.windowStartedAt),
 ]);

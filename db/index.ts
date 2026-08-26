@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { drizzle } from 'drizzle-orm/d1';
 import * as schema from './schema';
 import { universities } from '../app/data';
+import { rentalSeeds } from './rental-seeds.generated';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -28,6 +29,151 @@ async function migrateLegacyListings() {
   await db.batch([
     db.prepare('DROP TABLE IF EXISTS reviews'),
     db.prepare('DROP TABLE IF EXISTS listings'),
+  ]);
+}
+
+async function ensureUniversityCreatedAt() {
+  const db = getD1();
+  const tableInfo = await db.prepare('PRAGMA table_info(universities)').all<{ name: string }>();
+  if (tableInfo.results.length > 0 && !tableInfo.results.some((column) => column.name === 'created_at')) {
+    await db.prepare('ALTER TABLE universities ADD COLUMN created_at TEXT').run();
+  }
+}
+
+async function runBatches(statements: D1PreparedStatement[], size = 80) {
+  const db = getD1();
+  for (let index = 0; index < statements.length; index += size) {
+    await db.batch(statements.slice(index, index + size));
+  }
+}
+
+async function initializeCoreTables() {
+  const db = getD1();
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS professors (
+      id TEXT PRIMARY KEY NOT NULL,
+      university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
+      department TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS professor_ratings (
+      id TEXT PRIMARY KEY NOT NULL,
+      professor_id TEXT NOT NULL REFERENCES professors(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      easy_to_pass_score INTEGER NOT NULL CHECK (easy_to_pass_score BETWEEN 1 AND 5),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS rental_locations (
+      id TEXT PRIMARY KEY NOT NULL,
+      university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE RESTRICT,
+      address TEXT NOT NULL,
+      normalized_address TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      source TEXT NOT NULL CHECK (source IN ('government', 'user', 'admin')),
+      reference_rent INTEGER CHECK (reference_rent IS NULL OR reference_rent > 0),
+      reference_rent_source TEXT,
+      coordinate_source TEXT,
+      coordinates_verified INTEGER NOT NULL DEFAULT 0 CHECK (coordinates_verified IN (0, 1)),
+      created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK ((latitude IS NULL AND longitude IS NULL) OR
+             (latitude BETWEEN 21.8 AND 25.5 AND longitude BETWEEN 119.3 AND 122.1))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS rental_location_universities (
+      rental_location_id TEXT NOT NULL REFERENCES rental_locations(id) ON DELETE CASCADE,
+      university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (rental_location_id, university_id)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS rental_reports (
+      id TEXT PRIMARY KEY NOT NULL,
+      rental_location_id TEXT NOT NULL REFERENCES rental_locations(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      monthly_rent INTEGER NOT NULL CHECK (monthly_rent BETWEEN 1000 AND 200000),
+      overall_rating INTEGER NOT NULL CHECK (overall_rating BETWEEN 1 AND 5),
+      is_valid INTEGER NOT NULL DEFAULT 1 CHECK (is_valid IN (0, 1)),
+      is_outlier INTEGER NOT NULL DEFAULT 0 CHECK (is_outlier IN (0, 1)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS api_rate_limits (
+      user_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      window_started_at INTEGER NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, action, window_started_at)
+    )`),
+  ]);
+  await db.batch([
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_identity ON professors(university_id, department, name)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_university ON professors(university_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_department ON professors(department)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_name ON professors(name)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_professor_ratings_user_professor ON professor_ratings(user_id, professor_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_professor_ratings_professor ON professor_ratings(professor_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_professor_ratings_user ON professor_ratings(user_id)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_rental_locations_normalized_address ON rental_locations(normalized_address)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_locations_university ON rental_locations(university_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_locations_coordinates ON rental_locations(latitude, longitude)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_location_universities_university ON rental_location_universities(university_id, rental_location_id)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_rental_reports_user_location ON rental_reports(user_id, rental_location_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_location ON rental_reports(rental_location_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_user ON rental_reports(user_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_aggregate ON rental_reports(rental_location_id, is_valid, is_outlier)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_api_rate_limits_cleanup ON api_rate_limits(window_started_at)'),
+  ]);
+}
+
+async function seedRentalLocations() {
+  const db = getD1();
+  const timestamp = '2026-08-26T00:00:00.000Z';
+  const locationSeeds = rentalSeeds.map((seed) => db.prepare(`
+    INSERT INTO rental_locations (
+      id, university_id, address, normalized_address, latitude, longitude, source,
+      reference_rent, reference_rent_source, coordinate_source, coordinates_verified,
+      created_by_user_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'government', ?, 'government', ?, ?, NULL, ?, ?)
+    ON CONFLICT(normalized_address) DO UPDATE SET
+      reference_rent = excluded.reference_rent,
+      reference_rent_source = excluded.reference_rent_source,
+      latitude = COALESCE(rental_locations.latitude, excluded.latitude),
+      longitude = COALESCE(rental_locations.longitude, excluded.longitude),
+      coordinate_source = COALESCE(rental_locations.coordinate_source, excluded.coordinate_source),
+      updated_at = excluded.updated_at
+  `).bind(
+    seed.id, seed.primaryUniversityId, seed.address, seed.normalizedAddress,
+    seed.latitude, seed.longitude, seed.referenceRent, seed.coordinateSource,
+    seed.coordinatesVerified ? 1 : 0, timestamp, timestamp,
+  ));
+  await runBatches(locationSeeds);
+
+  const associationSeeds = rentalSeeds.flatMap((seed) => seed.universityIds.map((universityId) => db.prepare(`
+    INSERT INTO rental_location_universities (rental_location_id, university_id, created_at)
+    SELECT id, ?, ? FROM rental_locations WHERE normalized_address = ?
+    ON CONFLICT(rental_location_id, university_id) DO NOTHING
+  `).bind(universityId, timestamp, seed.normalizedAddress)));
+  await runBatches(associationSeeds);
+
+  await db.batch([
+    db.prepare(`INSERT INTO rental_locations (
+      id, university_id, address, normalized_address, latitude, longitude, source,
+      reference_rent, reference_rent_source, coordinate_source, coordinates_verified,
+      created_by_user_id, created_at, updated_at
+    ) VALUES (
+      'admin-niu-yizhong-82', 'niu', '260 宜蘭縣宜蘭市思源里宜中路82號',
+      '260宜蘭縣宜蘭市思源里宜中路82號', 24.74692, 121.74265, 'admin',
+      NULL, NULL, 'admin', 0, NULL, ?, ?
+    ) ON CONFLICT(normalized_address) DO NOTHING`).bind(timestamp, timestamp),
+    db.prepare(`INSERT INTO rental_location_universities (rental_location_id, university_id, created_at)
+      SELECT id, 'niu', ? FROM rental_locations
+      WHERE normalized_address = '260宜蘭縣宜蘭市思源里宜中路82號'
+      ON CONFLICT(rental_location_id, university_id) DO NOTHING`).bind(timestamp),
   ]);
 }
 
@@ -60,6 +206,8 @@ async function initializeDatabase() {
       created_at TEXT NOT NULL
     )`),
   ]);
+
+  await ensureUniversityCreatedAt();
 
   await migrateLegacyListings();
 
@@ -108,8 +256,8 @@ async function initializeDatabase() {
 
   const schoolSeeds = universities.map((school) => db.prepare(`
     INSERT INTO universities
-      (id, name, short_name, city, district, latitude, longitude, address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (id, name, short_name, city, district, latitude, longitude, address, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       short_name = excluded.short_name,
@@ -117,9 +265,13 @@ async function initializeDatabase() {
       district = excluded.district,
       latitude = excluded.latitude,
       longitude = excluded.longitude,
-      address = excluded.address
-  `).bind(school.id, school.name, school.shortName, school.city, school.district, school.latitude, school.longitude, school.address));
+      address = excluded.address,
+      created_at = COALESCE(universities.created_at, excluded.created_at)
+  `).bind(school.id, school.name, school.shortName, school.city, school.district, school.latitude, school.longitude, school.address, '2026-08-26T00:00:00.000Z'));
   await db.batch(schoolSeeds);
+
+  await initializeCoreTables();
+  await seedRentalLocations();
 }
 
 export function ensureDatabase() {

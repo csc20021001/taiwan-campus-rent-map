@@ -29,6 +29,20 @@
       "when": 1787741573627,
       "tag": "0003_add_yizhong_listing",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787744800000,
+      "tag": "0004_cloudflare_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787744900000,
+      "tag": "0005_seed_government_rentals",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { ensureDatabase, getD1 } from '@/db';
 import { getSessionUser, isSameOriginRequest } from '@/app/auth/server';
 import { validateListing } from './validation.mjs';
+import { enforceUserRateLimit, RateLimitError } from '@/db/rate-limit';
 
 type ListingRow = {
   id: string;
@@ -73,6 +74,12 @@ export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) return NextResponse.json({ error: '不允許跨站刊登。' }, { status: 403 });
   const user = await getSessionUser(request);
   if (!user) return NextResponse.json({ error: '請先使用 Google 登入。' }, { status: 401 });
+  try {
+    await enforceUserRateLimit(user.id, 'legacy-listing', 8, 60);
+  } catch (error) {
+    if (error instanceof RateLimitError) return NextResponse.json({ error: error.message }, { status: 429 });
+    throw error;
+  }
 
   let body: unknown;
   try {

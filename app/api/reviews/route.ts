@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ensureDatabase, getD1 } from '@/db';
-import { isSameOriginRequest } from '@/app/auth/server';
+import { getSessionUser, isSameOriginRequest } from '@/app/auth/server';
 import { validateReview } from './validation.mjs';
+import { enforceUserRateLimit, RateLimitError } from '@/db/rate-limit';
 
 type ReviewRow = { id: number; author_name: string; rating: number; content: string; created_at: string };
 
@@ -31,6 +32,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) return NextResponse.json({ error: '不允許跨站留言。' }, { status: 403 });
+  const user = await getSessionUser(request);
+  if (!user) return NextResponse.json({ error: '請先使用 Google 登入。' }, { status: 401 });
+  try {
+    await enforceUserRateLimit(user.id, 'legacy-review', 20, 60);
+  } catch (error) {
+    if (error instanceof RateLimitError) return NextResponse.json({ error: error.message }, { status: 429 });
+    throw error;
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -52,7 +61,7 @@ export async function POST(request: Request) {
     VALUES (?, ?, ?, ?, ?)
   `).bind(
     validated.value.listingId,
-    validated.value.authorName,
+    user.name,
     validated.value.rating,
     validated.value.content,
     createdAt,
@@ -60,7 +69,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ review: {
     id: Number(result.meta.last_row_id),
-    authorName: validated.value.authorName,
+    authorName: user.name,
     rating: validated.value.rating,
     content: validated.value.content,
     createdAt,

@@ -19,19 +19,19 @@ export default function PrivacyPage() {
           <h2>我們蒐集的資料</h2>
           <ul>
             <li>Google 登入後提供的帳號識別碼、姓名與電子郵件地址。</li>
-            <li>你主動刊登的租屋資料、地圖位置、聯絡方式，以及公開留言與評分。</li>
-            <li>維持登入與防止濫用所需的工作階段及基本技術紀錄。</li>
+            <li>你主動新增的租屋地點，以及回報的實付月租、住過評分或教授好不好過評分。</li>
+            <li>維持登入與防止濫用所需的工作階段、操作時間窗計數及基本技術紀錄。</li>
           </ul>
         </section>
 
         <section>
           <h2>使用目的與公開範圍</h2>
-          <p>我們使用帳號資料來驗證身分、標示內容來源、管理刊登與留言，以及維護服務安全。租屋刊登中的聯絡方式、留言暱稱、評分與留言內容會公開顯示；Google 帳號電子郵件不會公開，除非你自行把它填入公開聯絡欄位。</p>
+          <p>我們使用帳號資料來驗證身分、防止同一帳號重複灌票，以及維護服務安全。公開頁面只顯示租屋地點與匿名聚合後的租金、評分及人數；不顯示 Email、Google ID、內部 user ID、個別使用者回報內容或 OAuth token。</p>
         </section>
 
         <section>
           <h2>登入與安全</h2>
-          <p>Google 登入採用 OpenID Connect。本站不保存 Google 密碼、access token 或 refresh token；登入工作階段以 HttpOnly Cookie 和資料庫中的雜湊值維護。請勿在公開欄位填入不希望公開的個人資料。</p>
+          <p>Google 登入採用 OpenID Connect。本站不保存 Google 密碼、access token 或 refresh token；登入工作階段以 HttpOnly Cookie 和資料庫中的雜湊值維護。租屋地點不提供房東姓名、電話、私人地址留言或自由文字欄位。</p>
         </section>
 
         <section>
@@ -41,7 +41,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2>保存、權利與聯絡方式</h2>
-          <p>資料會保存到達成服務目的、處理爭議與維護安全所需的期間。你可依法請求查詢、更正或刪除自己的帳號與刊登資料。請寄信至 <a href="mailto:sjehd363960@gmail.com">sjehd363960@gmail.com</a>，我們會在確認身分後處理。</p>
+          <p>資料會保存到達成服務目的、處理爭議與維護安全所需的期間。你可依法請求查詢、更正或刪除自己的帳號、租屋地點與回報資料。請寄信至 <a href="mailto:sjehd363960@gmail.com">sjehd363960@gmail.com</a>，我們會在確認身分後處理。</p>
         </section>
 
         <nav className="legal-nav" aria-label="網站政策">
