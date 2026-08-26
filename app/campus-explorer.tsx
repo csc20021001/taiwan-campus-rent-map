@@ -2,7 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Footprints, Heart, Home, LocateFixed, MapPin, Menu, MessageCircle, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, X } from 'lucide-react';
-import type { Map as LeafletMap } from 'leaflet';
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from 'maplibre-gl';
+import type { Protocol } from 'pmtiles';
+import { AdSenseSlot } from './adsense';
+import { createCampusMapStyle, DEFAULT_PMTILES_URL } from './campus-map-style.mjs';
 import type { Listing } from './data';
 import { previewListings, universities } from './data';
 
@@ -11,6 +14,9 @@ type Filter = 'all' | 'studio' | 'under10' | 'cook';
 
 const price = new Intl.NumberFormat('zh-TW');
 const date = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'short', day: 'numeric' });
+const pmtilesUrl = process.env.NEXT_PUBLIC_PMTILES_URL?.trim() || DEFAULT_PMTILES_URL;
+
+let pmtilesProtocol: Protocol | null = null;
 
 function Rating({ value, count }: { value: number; count: number }) {
   return (
@@ -24,8 +30,8 @@ function Rating({ value, count }: { value: number; count: number }) {
 
 export function CampusExplorer() {
   const mapNode = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<LeafletMap | null>(null);
-  const markerLayer = useRef<import('leaflet').LayerGroup | null>(null);
+  const mapInstance = useRef<MapLibreMap | null>(null);
+  const markers = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [schoolId, setSchoolId] = useState('ntu');
   const [listingId, setListingId] = useState('ntu-01');
@@ -55,18 +61,30 @@ export function CampusExplorer() {
   useEffect(() => {
     if (!mapNode.current || mapInstance.current) return;
     let active = true;
-    import('leaflet').then((L) => {
+    Promise.all([import('maplibre-gl'), import('pmtiles')]).then(([maplibregl, pmtiles]) => {
       if (!active || !mapNode.current || mapInstance.current) return;
-      const map = L.map(mapNode.current, { zoomControl: false, attributionControl: true }).setView([school.latitude, school.longitude], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap 貢獻者' }).addTo(map);
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-      markerLayer.current = L.layerGroup().addTo(map);
+      if (!pmtilesProtocol) {
+        pmtilesProtocol = new pmtiles.Protocol();
+        maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
+      }
+      const map = new maplibregl.Map({
+        container: mapNode.current,
+        style: createCampusMapStyle(pmtilesUrl),
+        center: [school.longitude, school.latitude],
+        zoom: 15,
+        maxZoom: 18,
+        attributionControl: false,
+      });
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
       mapInstance.current = map;
       setMapReady(true);
-      setTimeout(() => map.invalidateSize(), 0);
+      requestAnimationFrame(() => map.resize());
     });
     return () => {
       active = false;
+      markers.current.forEach((marker) => marker.remove());
+      markers.current = [];
       mapInstance.current?.remove();
       mapInstance.current = null;
     };
@@ -92,26 +110,41 @@ export function CampusExplorer() {
 
   useEffect(() => {
     const map = mapInstance.current;
-    const layer = markerLayer.current;
-    if (!mapReady || !map || !layer) return;
+    if (!mapReady || !map) return;
     let active = true;
-    import('leaflet').then((L) => {
+    import('maplibre-gl').then((maplibregl) => {
       if (!active) return;
-      layer.clearLayers();
-      map.flyTo([school.latitude, school.longitude], 15, { duration: 0.9 });
-      const campusIcon = L.divIcon({ className: 'campus-marker-wrap', html: `<div class="campus-marker"><span>${school.shortName}</span></div>`, iconSize: [76, 76], iconAnchor: [38, 38] });
-      L.marker([school.latitude, school.longitude], { icon: campusIcon, zIndexOffset: 200 }).addTo(layer).bindTooltip(school.name, { direction: 'top', offset: [0, -28] });
-      filteredListings.forEach((listing, index) => {
+      markers.current.forEach((marker) => marker.remove());
+      markers.current = [];
+      map.flyTo({ center: [school.longitude, school.latitude], zoom: 15, duration: 900, essential: true });
+
+      const campusElement = document.createElement('div');
+      campusElement.className = 'campus-marker';
+      campusElement.setAttribute('role', 'img');
+      campusElement.setAttribute('aria-label', school.name);
+      const campusLabel = document.createElement('span');
+      campusLabel.textContent = school.shortName;
+      campusElement.appendChild(campusLabel);
+      markers.current.push(new maplibregl.Marker({ element: campusElement, anchor: 'center' })
+        .setLngLat([school.longitude, school.latitude])
+        .addTo(map));
+
+      filteredListings.forEach((listing) => {
         const selected = listing.id === listingId;
-        const rentIcon = L.divIcon({
-          className: 'rent-marker-wrap',
-          html: `<button class="rent-marker${selected ? ' is-selected' : ''}" aria-label="${listing.title}，月租 ${listing.monthlyRent} 元"><span>$${Math.round(listing.monthlyRent / 100) / 10}k</span></button>`,
-          iconSize: [62, 36], iconAnchor: [31, 18],
-        });
-        L.marker([listing.latitude, listing.longitude], { icon: rentIcon, zIndexOffset: selected ? 100 : index }).addTo(layer).on('click', () => {
+        const rentElement = document.createElement('button');
+        rentElement.type = 'button';
+        rentElement.className = `rent-marker${selected ? ' is-selected' : ''}`;
+        rentElement.setAttribute('aria-label', `${listing.title}，月租 ${listing.monthlyRent} 元`);
+        const rentLabel = document.createElement('span');
+        rentLabel.textContent = `$${Math.round(listing.monthlyRent / 100) / 10}k`;
+        rentElement.appendChild(rentLabel);
+        rentElement.addEventListener('click', () => {
           setListingId(listing.id);
           setMobilePanel(true);
         });
+        markers.current.push(new maplibregl.Marker({ element: rentElement, anchor: 'bottom' })
+          .setLngLat([listing.longitude, listing.latitude])
+          .addTo(map));
       });
     });
     return () => { active = false; };
@@ -211,6 +244,7 @@ export function CampusExplorer() {
             {([['all', '全部'], ['studio', '套房'], ['under10', '$10K 以下'], ['cook', '可開伙']] as [Filter, string][]).map(([value, label]) => <button className={filter === value ? 'active' : ''} type="button" key={value} onClick={() => setFilter(value)}>{label}</button>)}
           </div>
           <div className="trust-note"><ShieldCheck size={17} /><span><strong>學生真實回饋</strong>　評分與留言都會公開呈現</span></div>
+          <AdSenseSlot />
           <div className="cards" aria-live="polite">
             {filteredListings.length === 0 && <div className="empty-state"><Search size={22} /><strong>這個條件還沒有房源</strong><button type="button" onClick={() => setFilter('all')}>清除篩選</button></div>}
             {filteredListings.map((listing) => (
@@ -230,7 +264,7 @@ export function CampusExplorer() {
         <div className="map-panel" aria-label="校園周邊互動地圖">
           <div ref={mapNode} className="map-canvas" />
           <div className="map-school-card"><span className="map-school-icon"><MapPin size={18} /></span><span><strong>{school.name}</strong><small>{school.address}</small></span></div>
-          <button className="locate-button" type="button" onClick={() => mapInstance.current?.flyTo([school.latitude, school.longitude], 15)} aria-label="回到校園位置"><LocateFixed size={19} /></button>
+          <button className="locate-button" type="button" onClick={() => mapInstance.current?.flyTo({ center: [school.longitude, school.latitude], zoom: 15, duration: 700, essential: true })} aria-label="回到校園位置"><LocateFixed size={19} /></button>
           {!mobilePanel && <button className="show-results" type="button" onClick={() => setMobilePanel(true)}>查看 {filteredListings.length} 間租屋</button>}
           <div className="map-legend"><span><i className="legend-campus" />校園</span><span><i className="legend-rent" />租屋</span></div>
 

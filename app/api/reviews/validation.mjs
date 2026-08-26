@@ -1,6 +1,7 @@
 /**
  * Validate an anonymous rental review before it reaches SQLite/D1.
  * @param {{ listingId?: unknown, authorName?: unknown, rating?: unknown, content?: unknown }} input
+ * @returns {{ ok: false, error: string } | { ok: true, value: { listingId: string, authorName: string, rating: number, content: string } }}
  */
 export function validateReview(input) {
   const listingId = typeof input.listingId === 'string' ? input.listingId.trim() : '';

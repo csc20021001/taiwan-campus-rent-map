@@ -46,6 +46,9 @@ export default defineConfig(async () => {
 
   return {
     css: { postcss: { plugins: [tailwindcss()] } },
+    // MapLibre ships its Web Worker as a sibling module; keeping it out of
+    // Vite's dependency pre-bundler preserves that URL in local development.
+    optimizeDeps: { exclude: ['maplibre-gl', 'pmtiles'] },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

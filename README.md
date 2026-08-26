@@ -12,7 +12,8 @@
 
 ## 已完成功能
 
-- OpenStreetMap + Leaflet 互動地圖，不需要地圖 API 金鑰
+- OpenStreetMap 資料 + Protomaps PMTiles + MapLibre GL JS，不需要地圖 API 金鑰
+- 校園專用極簡底圖：保留道路、水域、綠地與建物輪廓，移除商家、景點、POI 與一般地名標籤
 - 11 所學校快速切換與校園／租屋圖標
 - 租金、房型、坪數、步行時間、特色與評分資訊
 - 套房、萬元以下、可開伙快速篩選
@@ -20,6 +21,24 @@
 - 響應式桌面側欄與手機底部面板
 - SQLite / Cloudflare D1 相容資料表、索引與 migrations
 - Open Graph 品牌分享圖與中文無障礙標示
+- AdSense 響應式廣告版位、站點驗證 meta 與動態 `ads.txt`（未設定帳號時安全顯示預留版位）
+
+## 地圖資料與商業使用
+
+前端以 MapLibre GL JS 顯示 PMTiles 向量地圖，樣式只引用 `earth`、`landuse`、`water`、`buildings` 與 `roads` 圖層，刻意不載入 `places`、`pois` 或任何 `symbol` 標籤層。校名與租屋價格由本站自己的資料與 Marker 呈現，所以地圖不會被餐廳、商店、景點及次要地名淹沒。
+
+預設 PMTiles 來源是 Protomaps 在 Source Cooperative 發布的公開 OSM Produced Work，適合本機開發與功能驗證。正式營運時請將臺灣範圍的 `.pmtiles` 放到自有 Cloudflare R2（搭配自訂網域與 CORS），並透過 `NEXT_PUBLIC_PMTILES_URL` 切換，避免長期熱連結公共資料站。畫面右下角會保留 OpenStreetMap contributors 與 Protomaps 的可見署名。
+
+## AdSense 設定
+
+複製 `.env.example` 為 `.env.local`，填入自己的 AdSense 資訊：
+
+```dotenv
+NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-1234567890123456
+NEXT_PUBLIC_ADSENSE_SLOT=1234567890
+```
+
+未填或格式不正確時，不會下載 Google 廣告程式，只顯示清楚標記、不遮擋內容的預留版位。設定完成後，全站會載入 AdSense、加入 `google-adsense-account` 驗證 meta，並在 `/ads.txt` 輸出對應 publisher 紀錄。AdSense 必須另外通過 Google 的站點審查；目前私有預覽站不適合送審，正式申請前需要公開可供 Google 檢索的網域與完整內容政策頁。
 
 ## 資料儲存策略
 
@@ -56,4 +75,4 @@ npm audit
 
 ## 技術組合
 
-Vinext / Next.js App Router、React、TypeScript、Leaflet、OpenStreetMap、Cloudflare D1、Drizzle ORM、Cloudflare Workers。
+Vinext / Next.js App Router、React、TypeScript、MapLibre GL JS、PMTiles、OpenStreetMap、Cloudflare D1、Drizzle ORM、Cloudflare Workers。

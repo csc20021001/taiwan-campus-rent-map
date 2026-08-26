@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_TC, Noto_Serif_TC } from 'next/font/google';
+import Script from 'next/script';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './globals.css';
 
 const notoSans = Noto_Sans_TC({ variable: '--font-noto-sans-tc', subsets: ['latin'], display: 'swap' });
 const notoSerif = Noto_Serif_TC({ variable: '--font-noto-serif-tc', subsets: ['latin'], display: 'swap' });
+const adsenseClient = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? '';
+const hasAdsenseClient = /^ca-pub-\d+$/.test(adsenseClient);
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://xiaobian-campus-nest.sjehd363960.chatgpt.site'),
@@ -24,12 +28,24 @@ export const metadata: Metadata = {
     description: '從地圖探索臺灣國立大學周邊租屋，查看學生的真實留言與評分。',
     images: ['/og.png'],
   },
+  ...(hasAdsenseClient ? { other: { 'google-adsense-account': adsenseClient } } : {}),
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-Hant-TW">
-      <body className={`${notoSans.variable} ${notoSerif.variable}`}>{children}</body>
+      <body className={`${notoSans.variable} ${notoSerif.variable}`}>
+        {hasAdsenseClient && (
+          <Script
+            id="google-adsense"
+            async
+            strategy="afterInteractive"
+            crossOrigin="anonymous"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
+          />
+        )}
+        {children}
+      </body>
     </html>
   );
 }

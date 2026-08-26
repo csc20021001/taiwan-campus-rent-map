@@ -15,9 +15,10 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "leaflet": "1.9.4",
     "lucide-react": "0.544.0",
+    "maplibre-gl": "^6.6.0",
     "next": "16.3.3",
+    "pmtiles": "^4.5.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -26,7 +27,6 @@
     "@cloudflare/workers-types": "5.20260826.1",
     "@openai/sites-vite-plugin": "^0.1.0 || ^0.2.0",
     "@tailwindcss/postcss": "4.2.1",
-    "@types/leaflet": "1.9.20",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
