@@ -376,6 +376,7 @@ export function CampusExplorer() {
           <ChevronDown size={16} aria-hidden="true" />
         </label>
         <nav className="top-actions" aria-label="主要選單">
+          <a className="ghost-button legal-button" href="/privacy">隱私權</a>
           {!authLoading && !auth.user && <button className="ghost-button login-button" type="button" onClick={beginLogin}><LogIn size={17} />Google 登入</button>}
           {auth.user && <button className="ghost-button account-button" type="button" onClick={() => void logout()} title={`${auth.user.email}・點擊登出`}><span className="account-avatar">{auth.user.name.slice(0, 1)}</span><span>{auth.user.name}</span><LogOut size={15} /></button>}
           <button className="publish-button" type="button" onClick={openPublish}><Sparkles size={16} />刊登租屋</button>

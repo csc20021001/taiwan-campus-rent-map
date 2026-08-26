@@ -22,6 +22,7 @@
 - 響應式桌面側欄與手機底部面板
 - SQLite / Cloudflare D1 相容資料表、索引與 migrations
 - Open Graph 品牌分享圖與中文無障礙標示
+- Google OAuth 與 AdSense 可公開引用的隱私權政策、服務條款頁面
 - AdSense 響應式廣告版位、站點驗證 meta 與動態 `ads.txt`（未設定帳號時安全顯示預留版位）
 
 ## 地圖資料與商業使用
