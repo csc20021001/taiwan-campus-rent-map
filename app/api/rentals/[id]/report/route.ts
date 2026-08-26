@@ -31,7 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!location) return NextResponse.json({ error: '找不到租屋地點。' }, { status: 404 });
 
   const baseline = await medianRentExcludingUser(id, user.id);
-  const isOutlier = baseline.reportCount >= 5 && baseline.medianRent !== null &&
+  const isOutlier = baseline.priceSourceCount >= 5 && baseline.medianRent !== null &&
     (validated.value.monthlyRent < baseline.medianRent * 0.4 || validated.value.monthlyRent > baseline.medianRent * 2.5);
   const now = new Date().toISOString();
   await db.prepare(`INSERT INTO rental_reports (

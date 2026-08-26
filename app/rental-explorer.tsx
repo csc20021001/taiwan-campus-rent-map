@@ -24,6 +24,7 @@ type Rental = {
   coordinatesVerified: boolean;
   averageRent: number | null;
   medianRent: number | null;
+  priceSourceCount: number;
   rentReportCount: number;
   averageRating: number | null;
   ratingCount: number;
@@ -42,7 +43,11 @@ function sourceLabel(source: Rental['source']) {
 
 function rentLabel(rental: Rental) {
   if (rental.averageRent !== null) return `$${Math.round(rental.averageRent / 100) / 10}k`;
-  return rental.referenceRent !== null ? '參考' : '地點';
+  return '待回報';
+}
+
+function ratingLabel(rental: Rental) {
+  return rental.averageRating === null ? '★ 未評' : `★ ${rental.averageRating.toFixed(1)}`;
 }
 
 export function RentalExplorer() {
@@ -119,7 +124,10 @@ export function RentalExplorer() {
         if (!active) return;
         setAuth(data);
         const params = new URLSearchParams(window.location.search);
-        if (params.get('authError')) setToast('Google 登入失敗，請稍後再試');
+        const authError = params.get('authError');
+        if (authError === 'not-configured') setToast('此網址尚未完成 Google 登入設定，請改用正式網站');
+        else if (authError === 'invalid-state') setToast('登入驗證已逾時，請重新登入');
+        else if (authError) setToast('Google 登入失敗，請重新登入');
         if (data.user && params.get('add') === '1') setAddOpen(true);
         if (params.has('authError') || params.has('add')) window.history.replaceState({}, '', window.location.pathname);
       })
@@ -163,13 +171,17 @@ export function RentalExplorer() {
   useEffect(() => {
     const map = mapInstance.current;
     if (!mapReady || !map) return;
+    map.flyTo({ center: [school.longitude, school.latitude], zoom: 14.6, duration: 800, essential: true });
+  }, [mapReady, school.latitude, school.longitude]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!mapReady || !map) return;
     let active = true;
     import('maplibre-gl').then((maplibregl) => {
       if (!active) return;
       markers.current.forEach((marker) => marker.remove());
       markers.current = [];
-      map.flyTo({ center: [school.longitude, school.latitude], zoom: 14.6, duration: 800, essential: true });
-
       const campusElement = document.createElement('div');
       campusElement.className = 'campus-marker';
       const campusLabel = document.createElement('span');
@@ -182,11 +194,16 @@ export function RentalExplorer() {
         if (rental.latitude === null || rental.longitude === null) return;
         const element = document.createElement('button');
         element.type = 'button';
-        element.className = `rent-marker${rental.id === selectedId ? ' is-selected' : ''}`;
-        element.setAttribute('aria-label', rental.address);
-        const label = document.createElement('span');
-        label.textContent = rentLabel(rental);
-        element.appendChild(label);
+        element.className = 'rent-marker';
+        element.dataset.rentalId = rental.id;
+        element.setAttribute('aria-label', `${rental.address}，平均租金 ${rentLabel(rental)}，平均評分 ${ratingLabel(rental)}`);
+        const price = document.createElement('span');
+        price.className = 'rent-marker-price';
+        price.textContent = rentLabel(rental);
+        const rating = document.createElement('span');
+        rating.className = 'rent-marker-rating';
+        rating.textContent = ratingLabel(rental);
+        element.append(price, rating);
         element.addEventListener('click', () => {
           setSelectedId(rental.id);
           setDetailOpen(true);
@@ -205,7 +222,13 @@ export function RentalExplorer() {
       }
     });
     return () => { active = false; };
-  }, [addOpen, draftLatitude, draftLongitude, filteredRentals, locationConfirmed, mapReady, school, selectedId]);
+  }, [addOpen, draftLatitude, draftLongitude, filteredRentals, locationConfirmed, mapReady, school]);
+
+  useEffect(() => {
+    mapNode.current?.querySelectorAll<HTMLElement>('.rent-marker').forEach((element) => {
+      element.classList.toggle('is-selected', element.dataset.rentalId === selectedId);
+    });
+  }, [filteredRentals, selectedId]);
 
   useEffect(() => {
     const map = mapInstance.current;
@@ -329,7 +352,7 @@ export function RentalExplorer() {
             {([['all', '全部'], ['reported', '已有回報'], ['under10', '平均萬元內'], ['government', '政府地點']] as const).map(([id, label]) =>
               <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>)}
           </div>
-          <p className="trust-note"><ShieldCheck size={15} />政府參考租金與使用者回報統計分開顯示。</p>
+          <p className="trust-note"><ShieldCheck size={15} />價格不分來源，以所有有效資料取平均；評分亦同。</p>
           <AdSenseSlot slot={process.env.NEXT_PUBLIC_ADSENSE_MAP_SLOT ?? ''} />
           <div className="cards">
             {loading && <div className="empty-state"><span className="loading-dot" /><strong>載入 D1 地點資料</strong></div>}
@@ -338,8 +361,8 @@ export function RentalExplorer() {
               <span className="rental-source">{rental.source === 'government' ? '政府地點' : rental.source === 'admin' ? '管理員建立' : '使用者新增'}</span>
               <strong>{rental.address}</strong>
               <span className="rental-card-stats">
-                <span><small>使用者回報平均租金</small><b>{rental.averageRent === null ? '尚無回報' : `NT$${money.format(rental.averageRent)}`}</b></span>
-                <span><small>評分</small><b>{rental.averageRating === null ? '—' : `★ ${rental.averageRating.toFixed(1)}`}</b></span>
+                <span><small>所有來源平均租金</small><b>{rental.averageRent === null ? '尚無資料' : `NT$${money.format(rental.averageRent)}`}</b></span>
+                <span><small>所有評分平均</small><b>{rental.averageRating === null ? '—' : `★ ${rental.averageRating.toFixed(1)}`}</b></span>
               </span>
               {rental.referenceRent !== null && <span className="reference-rent">政府歷史租賃參考：NT${money.format(rental.referenceRent)} / 月</span>}
               {rental.latitude === null && <span className="coordinate-warning">位置待確認，暫不顯示 Marker</span>}
@@ -358,12 +381,12 @@ export function RentalExplorer() {
             <div className="drawer-head"><span><p>{sourceLabel(selected.source)}</p><h2>{selected.address}</h2><small>{selected.coordinatesVerified ? '地圖位置已確認' : selected.latitude === null ? '位置待確認' : '地圖位置為近似值，請以地址為準'}</small></span><button onClick={() => { setDetailOpen(false); setFormError(''); }} aria-label="關閉"><X size={15} /></button></div>
             <div className="rental-detail-content">
               <div className="metric-grid">
-                <article><CircleDollarSign size={17} /><small>使用者回報平均租金</small><strong>{selected.averageRent === null ? '尚無回報' : `NT$${money.format(selected.averageRent)} / 月`}</strong></article>
-                <article><BarChart3 size={17} /><small>典型租金（中位數）</small><strong>{selected.medianRent === null ? '尚無回報' : `NT$${money.format(selected.medianRent)} / 月`}</strong></article>
-                <article><Star size={17} /><small>住過評分</small><strong>{selected.averageRating === null ? '尚無評分' : `${selected.averageRating.toFixed(1)} / 5`}</strong></article>
-                <article><ShieldCheck size={17} /><small>有效回報</small><strong>{selected.rentReportCount} 人</strong></article>
+                <article><CircleDollarSign size={17} /><small>所有來源平均租金</small><strong>{selected.averageRent === null ? '尚無資料' : `NT$${money.format(selected.averageRent)} / 月`}</strong></article>
+                <article><BarChart3 size={17} /><small>價格資料筆數</small><strong>{selected.priceSourceCount} 筆</strong></article>
+                <article><Star size={17} /><small>所有評分平均</small><strong>{selected.averageRating === null ? '尚無評分' : `${selected.averageRating.toFixed(1)} / 5`}</strong></article>
+                <article><ShieldCheck size={17} /><small>使用者有效回報</small><strong>{selected.rentReportCount} 人</strong></article>
               </div>
-              {selected.referenceRent !== null && <div className="government-reference"><strong>政府歷史租賃參考</strong><span>NT${money.format(selected.referenceRent)} / 月</span><small>此數字不加入使用者平均與中位數計算。</small></div>}
+              {selected.referenceRent !== null && <div className="government-reference"><strong>政府歷史租賃參考</strong><span>NT${money.format(selected.referenceRent)} / 月</span><small>這筆資料已納入上方平均租金；每個來源各計一筆。</small></div>}
               <form className="rental-report-form" onSubmit={submitReport}>
                 <h3>回報你實際住過的價格</h3><p>同一 Google 帳號只保留一筆，重新送出會更新。</p>
                 <label>每月實付租金<input type="number" min="1000" max="200000" step="1" required value={monthlyRent} onChange={(event) => setMonthlyRent(event.target.value)} placeholder="例如 8500" /></label>

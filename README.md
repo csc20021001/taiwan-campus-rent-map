@@ -8,7 +8,7 @@
 - MapLibre GL JS + OpenStreetMap／Protomaps PMTiles 極簡底圖，不需要商業地圖 API 金鑰
 - Marker、地址、租金與評分全部由 Cloudflare D1 提供
 - 52 個政府資料去重後地點、55 筆學校關聯，以及 1 個管理員建立的宜蘭地點
-- 政府歷史租賃參考與使用者回報平均／中位數嚴格分開
+- 政府歷史租賃參考與有效使用者回報不分來源，合併計算平均租金；評分亦取所有有效回報平均
 - Google OpenID Connect、PKCE、HttpOnly 工作階段
 - 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
@@ -47,7 +47,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 
 ### 租金統計
 
-使用者平均、中位數、回報人數與評分只讀取 `rental_reports` 中 `is_valid = 1 AND is_outlier = 0` 的資料。`rental_locations.reference_rent` 只顯示為「政府歷史租賃參考」，永遠不加入統計。API 接受月租 1,000～200,000 元；至少有 5 個既有有效回報後，低於中位數 0.4 倍或高於 2.5 倍的新值會保留原始紀錄，但標記為 `is_outlier`。
+平均租金將 `rental_locations.reference_rent`（若有）與 `rental_reports` 中 `is_valid = 1 AND is_outlier = 0` 的月租視為同等資料點後計算；平均評分則納入所有有效且非異常的使用者評分。API 接受月租 1,000～200,000 元；至少有 5 個既有有效價格資料點後，低於綜合中位數 0.4 倍或高於 2.5 倍的新值會保留原始紀錄，但標記為 `is_outlier`。
 
 ## REST API
 
@@ -55,7 +55,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 |---|---|---|
 | GET | `/api/universities` | D1 學校清單 |
 | GET | `/api/rentals?university_id=...&north=...&south=...&east=...&west=...` | 學校／地圖範圍內地點 |
-| GET | `/api/rentals/:id` | 地址、平均、中位數、評分與參考租金 |
+| GET | `/api/rentals/:id` | 地址、跨來源平均、價格資料筆數、評分與參考租金 |
 | POST | `/api/rentals` | 登入後新增或導向既有地點 |
 | POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
 | GET | `/api/professors` | `university_id`、`department`、`search` 篩選 |
@@ -79,7 +79,7 @@ NEXT_PUBLIC_ADSENSE_SLOT=
 正式 Google OAuth redirect URI：
 
 ```text
-https://xiaobian-campus-nest.sjehd363960.chatgpt.site/api/auth/google/callback
+https://scmwcscr.com/api/auth/google/callback
 ```
 
 Client Secret 只能設定為 Worker／Sites 伺服器環境變數，不可使用 `NEXT_PUBLIC_` 前綴，也不可提交 Git。登入流程驗證 `state`、PKCE、Google JWKS、issuer、audience 與 Email verified；D1 不保存 access token、refresh token 或 Google 密碼。
@@ -133,7 +133,7 @@ npm run build
 npm audit
 ```
 
-Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 個不重複地點、56 筆學校關聯、唯一評分／回報限制，以及政府參考租金沒有成為使用者回報。
+Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 個不重複地點、56 筆學校關聯、唯一評分／回報限制，以及政府參考與有效使用者回報的跨來源平均計算。
 
 ## 地圖授權
 

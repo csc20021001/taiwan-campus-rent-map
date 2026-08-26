@@ -104,10 +104,13 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline:3px solid 
 .campus-marker { position:relative; width:76px; height:76px; display:grid; place-items:center; border-radius:50%; background:rgba(23,63,53,.16); border:1px solid rgba(23,63,53,.24); }
 .campus-marker::before { content:''; position:absolute; width:43px; height:43px; border-radius:50% 50% 50% 15%; background:var(--green); transform:rotate(-45deg); box-shadow:0 5px 18px rgba(23,63,53,.3); }
 .campus-marker span { position:relative; z-index:1; color:white; font-size:10px; font-weight:900; }
-.rent-marker { width:62px; height:32px; position:relative; display:grid; place-items:center; padding:0; color:var(--green); background:white; border:2px solid white; border-radius:8px; box-shadow:0 4px 15px rgba(31,50,44,.22); cursor:pointer; }
+.rent-marker { min-width:72px; min-height:42px; position:relative; display:grid; place-items:center; gap:1px; padding:5px 8px 6px; color:var(--green); background:white; border:2px solid white; border-radius:9px; box-shadow:0 4px 15px rgba(31,50,44,.22); cursor:pointer; }
 .rent-marker::after { content:''; position:absolute; left:50%; bottom:-5px; width:9px; height:9px; background:inherit; transform:translateX(-50%) rotate(45deg); }
-.rent-marker span { position:relative; z-index:1; font-size:11px; font-weight:900; }
+.rent-marker span { position:relative; z-index:1; white-space:nowrap; }
+.rent-marker-price { font-size:11px; font-weight:900; }
+.rent-marker-rating { color:#c97916; font-size:9px; font-weight:850; }
 .rent-marker.is-selected { color:white; background:var(--orange); transform:scale(1.08); }
+.rent-marker.is-selected .rent-marker-rating { color:white; }
 .draft-marker { position:relative; min-width:88px; padding:8px 10px; color:#8c4b31; background:#fff4eb; border:2px dashed var(--orange); border-radius:10px; box-shadow:0 6px 18px rgba(62,44,35,.2); font-size:9px; font-weight:850; text-align:center; }
 .draft-marker.is-confirmed { color:white; background:var(--orange); border-style:solid; }
 .draft-marker::after { content:''; position:absolute; left:50%; bottom:-6px; width:10px; height:10px; background:inherit; border-right:2px solid var(--orange); border-bottom:2px solid var(--orange); transform:translateX(-50%) rotate(45deg); }

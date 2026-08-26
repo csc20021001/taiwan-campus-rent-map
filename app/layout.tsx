@@ -10,13 +10,13 @@ const adsenseClient = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? '';
 const hasAdsenseClient = /^ca-pub-\d+$/.test(adsenseClient);
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://xiaobian-campus-nest.sjehd363960.chatgpt.site'),
+  metadataBase: new URL('https://scmwcscr.com'),
   title: '校邊 Campus Nest｜大學周邊租屋地圖',
   description: '從地圖探索臺灣國立大學周邊租屋地點；Google 登入後可回報實付租金與住過評分。',
   openGraph: {
     type: 'website',
     locale: 'zh_TW',
-    url: 'https://xiaobian-campus-nest.sjehd363960.chatgpt.site',
+    url: 'https://scmwcscr.com',
     siteName: '校邊 Campus Nest',
     title: '校邊 Campus Nest｜大學周邊租屋地圖',
     description: '從地圖探索臺灣國立大學周邊租屋地點；登入後回報實付租金與住過評分。',

@@ -14,6 +14,7 @@ export type RentalLocationView = {
   coordinatesVerified: boolean;
   averageRent: number | null;
   medianRent: number | null;
+  priceSourceCount: number;
   rentReportCount: number;
   averageRating: number | null;
   ratingCount: number;
@@ -31,6 +32,7 @@ type RentalRow = {
   coordinate_source: string | null;
   coordinates_verified: number;
   average_rent: number | null;
+  price_source_count: number;
   rent_report_count: number;
   average_rating: number | null;
   rating_count: number;
@@ -50,6 +52,7 @@ function mapRental(row: RentalRow, medianRent: number | null): RentalLocationVie
     coordinatesVerified: Boolean(row.coordinates_verified),
     averageRent: row.average_rent === null ? null : Number(row.average_rent),
     medianRent,
+    priceSourceCount: Number(row.price_source_count),
     rentReportCount: Number(row.rent_report_count),
     averageRating: row.average_rating === null ? null : Number(row.average_rating),
     ratingCount: Number(row.rating_count),
@@ -75,7 +78,15 @@ export async function listRentalLocations(options: {
       l.id, lu.university_id, l.address, l.latitude, l.longitude, l.source,
       l.reference_rent, l.reference_rent_source, l.coordinate_source,
       l.coordinates_verified,
-      ROUND(AVG(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN r.monthly_rent END), 0) AS average_rent,
+      ROUND(
+        (COALESCE(SUM(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN r.monthly_rent END), 0)
+          + COALESCE(l.reference_rent, 0)) * 1.0 /
+        NULLIF(COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END)
+          + CASE WHEN l.reference_rent IS NULL THEN 0 ELSE 1 END, 0),
+        0
+      ) AS average_rent,
+      COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END)
+        + CASE WHEN l.reference_rent IS NULL THEN 0 ELSE 1 END AS price_source_count,
       COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END) AS rent_report_count,
       ROUND(AVG(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN r.overall_rating END), 1) AS average_rating,
       COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END) AS rating_count
@@ -84,7 +95,7 @@ export async function listRentalLocations(options: {
     LEFT JOIN rental_reports r ON r.rental_location_id = l.id
     WHERE ${conditions.join(' AND ')}
     GROUP BY l.id, lu.university_id
-    ORDER BY rent_report_count DESC, l.reference_rent IS NULL, l.reference_rent ASC, l.address ASC
+    ORDER BY price_source_count DESC, l.reference_rent IS NULL, average_rent ASC, l.address ASC
     LIMIT 250
   `).bind(...values).all<RentalRow>();
 
@@ -98,7 +109,15 @@ export async function getRentalLocation(id: string): Promise<RentalLocationView 
         l.id, l.university_id, l.address, l.latitude, l.longitude, l.source,
         l.reference_rent, l.reference_rent_source, l.coordinate_source,
         l.coordinates_verified,
-        ROUND(AVG(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN r.monthly_rent END), 0) AS average_rent,
+        ROUND(
+          (COALESCE(SUM(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN r.monthly_rent END), 0)
+            + COALESCE(l.reference_rent, 0)) * 1.0 /
+          NULLIF(COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END)
+            + CASE WHEN l.reference_rent IS NULL THEN 0 ELSE 1 END, 0),
+          0
+        ) AS average_rent,
+        COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END)
+          + CASE WHEN l.reference_rent IS NULL THEN 0 ELSE 1 END AS price_source_count,
         COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END) AS rent_report_count,
         ROUND(AVG(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN r.overall_rating END), 1) AS average_rating,
         COUNT(CASE WHEN r.is_valid = 1 AND r.is_outlier = 0 THEN 1 END) AS rating_count
@@ -107,15 +126,22 @@ export async function getRentalLocation(id: string): Promise<RentalLocationView 
       WHERE l.id = ?
       GROUP BY l.id
     `).bind(id),
-    getD1().prepare(`WITH ranked AS (
-      SELECT monthly_rent, ROW_NUMBER() OVER (ORDER BY monthly_rent) AS row_number,
-        COUNT(*) OVER () AS total
+    getD1().prepare(`WITH price_values AS (
+      SELECT reference_rent AS monthly_rent
+      FROM rental_locations
+      WHERE id = ? AND reference_rent IS NOT NULL
+      UNION ALL
+      SELECT monthly_rent
       FROM rental_reports
       WHERE rental_location_id = ? AND is_valid = 1 AND is_outlier = 0
+    ), ranked AS (
+      SELECT monthly_rent, ROW_NUMBER() OVER (ORDER BY monthly_rent) AS row_number,
+        COUNT(*) OVER () AS total
+      FROM price_values
     )
     SELECT ROUND(AVG(monthly_rent), 0) AS median_rent
     FROM ranked
-    WHERE row_number IN ((total + 1) / 2, (total + 2) / 2)`).bind(id),
+    WHERE row_number IN ((total + 1) / 2, (total + 2) / 2)`).bind(id, id),
   ]);
 
   const row = rowResult.results[0] as RentalRow | undefined;
@@ -145,18 +171,25 @@ export async function attachRentalToUniversity(rentalLocationId: string, univers
 }
 
 export async function medianRentExcludingUser(rentalLocationId: string, userId: string) {
-  const row = await getD1().prepare(`WITH ranked AS (
-    SELECT monthly_rent, ROW_NUMBER() OVER (ORDER BY monthly_rent) AS row_number,
-      COUNT(*) OVER () AS total
+  const row = await getD1().prepare(`WITH price_values AS (
+    SELECT reference_rent AS monthly_rent
+    FROM rental_locations
+    WHERE id = ? AND reference_rent IS NOT NULL
+    UNION ALL
+    SELECT monthly_rent
     FROM rental_reports
     WHERE rental_location_id = ? AND user_id != ? AND is_valid = 1 AND is_outlier = 0
+  ), ranked AS (
+    SELECT monthly_rent, ROW_NUMBER() OVER (ORDER BY monthly_rent) AS row_number,
+      COUNT(*) OVER () AS total
+    FROM price_values
   )
-  SELECT ROUND(AVG(monthly_rent), 0) AS median_rent, MAX(total) AS report_count
+  SELECT ROUND(AVG(monthly_rent), 0) AS median_rent, MAX(total) AS price_source_count
   FROM ranked
-  WHERE row_number IN ((total + 1) / 2, (total + 2) / 2)`).bind(rentalLocationId, userId)
-    .first<{ median_rent: number | null; report_count: number | null }>();
+  WHERE row_number IN ((total + 1) / 2, (total + 2) / 2)`).bind(rentalLocationId, rentalLocationId, userId)
+    .first<{ median_rent: number | null; price_source_count: number | null }>();
   return {
     medianRent: row?.median_rent === null || row?.median_rent === undefined ? null : Number(row.median_rent),
-    reportCount: Number(row?.report_count ?? 0),
+    priceSourceCount: Number(row?.price_source_count ?? 0),
   };
 }
