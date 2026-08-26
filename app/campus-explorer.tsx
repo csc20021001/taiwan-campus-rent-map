@@ -90,7 +90,7 @@ export function CampusExplorer() {
   const selectedListing = listings.find((item) => item.id === listingId) ?? listings[0];
   const filteredListings = useMemo(() => listings.filter((listing) => {
     if (filter === 'studio') return listing.roomType.includes('套房');
-    if (filter === 'under10') return listing.monthlyRent < 10000;
+    if (filter === 'under10') return listing.monthlyRent > 0 && listing.monthlyRent < 10000;
     if (filter === 'cook') return listing.highlights.includes('可開伙') || listing.highlights.includes('公共廚房');
     return true;
   }), [filter, listings]);
@@ -393,19 +393,19 @@ export function CampusExplorer() {
           <div className="quick-filters" aria-label="快速篩選">
             {([['all', '全部'], ['studio', '套房'], ['under10', '$10K 以下'], ['cook', '可開伙']] as [Filter, string][]).map(([value, label]) => <button className={filter === value ? 'active' : ''} type="button" key={value} onClick={() => setFilter(value)}>{label}</button>)}
           </div>
-          <div className="trust-note"><ShieldCheck size={17} /><span><strong>零示範資料</strong>　房源皆由登入會員自行刊登</span></div>
+          <div className="trust-note"><ShieldCheck size={17} /><span><strong>零示範資料</strong>　只顯示實際提供的刊登資訊</span></div>
           <AdSenseSlot />
           <div className="cards" aria-live="polite">
             {listingsLoading && <div className="empty-state"><span className="loading-dot" /><strong>正在讀取正式房源</strong></div>}
             {!listingsLoading && filteredListings.length === 0 && <div className="empty-state"><MapPin size={24} /><strong>這所學校還沒有公開房源</strong><span>登入後刊登第一筆真實租屋資訊</span><button type="button" onClick={openPublish}>開始刊登</button></div>}
             {filteredListings.map((listing) => (
               <article className={`listing-card ${listing.id === listingId ? 'is-selected' : ''}`} key={listing.id} onClick={() => setListingId(listing.id)}>
-                <div className="card-accent" aria-hidden="true"><span>會員刊登</span></div>
+                <div className="card-accent" aria-hidden="true"><span>{listing.id.startsWith('manual-') ? '站方代登' : '會員刊登'}</span></div>
                 <div className="card-body">
                   <div className="card-topline"><div><p className="card-location"><MapPin size={12} />{listing.address}</p><h2>{listing.title}</h2></div><button className={`save-button ${saved.includes(listing.id) ? 'is-saved' : ''}`} type="button" onClick={(event) => { event.stopPropagation(); toggleSaved(listing.id); }} aria-label={saved.includes(listing.id) ? '取消收藏' : '收藏'}><Heart size={18} fill={saved.includes(listing.id) ? 'currentColor' : 'none'} /></button></div>
-                  <div className="price-row"><p><strong>${price.format(listing.monthlyRent)}</strong><span>/ 月</span></p><Rating value={listing.rating} count={listing.reviewCount} /></div>
-                  <div className="facts"><span>{listing.roomType}</span><span>{listing.areaPing} 坪</span><span><Footprints size={13} />步行 {listing.walkMinutes} 分</span></div>
-                  <div className="contact-line">{listing.contactMethod}：{listing.contactValue}</div>
+                  <div className="price-row"><p>{listing.monthlyRent > 0 ? <><strong>${price.format(listing.monthlyRent)}</strong><span>/ 月</span></> : <strong>租金洽詢</strong>}</p><Rating value={listing.rating} count={listing.reviewCount} /></div>
+                  <div className="facts"><span>{listing.roomType}</span><span>{listing.areaPing > 0 ? `${listing.areaPing} 坪` : '坪數洽詢'}</span><span><Footprints size={13} />{listing.walkMinutes > 0 ? `步行 ${listing.walkMinutes} 分` : '時間洽詢'}</span></div>
+                  <div className="contact-line">{listing.contactMethod}：{listing.contactMethod === '電話' ? <a href={`tel:${listing.contactValue}`}>{listing.contactValue}</a> : listing.contactValue}</div>
                   <div className="card-bottom"><div className="tags">{listing.highlights.map((tag) => <span key={tag}>{tag}</span>)}</div><button type="button" className="review-link" onClick={(event) => { event.stopPropagation(); void openReviews(listing); }}><MessageCircle size={13} />看留言</button></div>
                 </div>
               </article>
