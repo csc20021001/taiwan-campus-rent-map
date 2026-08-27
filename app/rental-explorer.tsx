@@ -141,8 +141,14 @@ export function RentalExplorer() {
     if (!mapNode.current || mapInstance.current) return;
     let active = true;
     let resizeObserver: ResizeObserver | null = null;
-    import('maplibre-gl').then((maplibregl) => {
+    Promise.all([
+      import('maplibre-gl'),
+      import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'),
+    ]).then(([maplibregl, workerModule]) => {
       if (!active || !mapNode.current || mapInstance.current) return;
+      // Production bundlers do not automatically copy MapLibre's sibling
+      // worker file. Importing it as an asset keeps the worker URL deployable.
+      maplibregl.setWorkerUrl(workerModule.default);
       const map = new maplibregl.Map({
         container: mapNode.current,
         style: createCampusMapStyle(vectorTileUrl),

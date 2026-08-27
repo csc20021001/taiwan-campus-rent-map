@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createCampusMapStyle, DEFAULT_VECTOR_TILE_URL } from '../app/campus-map-style.mjs';
+
+const rentalExplorer = readFileSync(new URL('../app/rental-explorer.tsx', import.meta.url), 'utf8');
 
 test('campus map uses the hosted OpenFreeMap vector source', () => {
   const style = createCampusMapStyle();
@@ -15,4 +18,9 @@ test('campus map contains no place, POI, or symbol layers', () => {
   assert.equal(style.layers.some((layer) => ['place', 'poi', 'pois'].includes(layer['source-layer'])), false);
   assert.equal(style.layers.some((layer) => layer['source-layer'] === 'building'), true);
   assert.equal(style.layers.some((layer) => layer['source-layer'] === 'transportation'), true);
+});
+
+test('production map explicitly bundles and configures the MapLibre worker', () => {
+  assert.match(rentalExplorer, /maplibre-gl-worker\.mjs\?worker&url/);
+  assert.match(rentalExplorer, /setWorkerUrl\(workerModule\.default\)/);
 });
