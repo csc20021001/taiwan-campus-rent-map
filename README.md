@@ -79,7 +79,7 @@ NEXT_PUBLIC_ADSENSE_SLOT=
 正式 Google OAuth redirect URI：
 
 ```text
-https://scmwcscr.com/api/auth/google/callback
+https://map.scmwcscr.com/api/auth/google/callback
 ```
 
 Client Secret 只能設定為 Worker／Sites 伺服器環境變數，不可使用 `NEXT_PUBLIC_` 前綴，也不可提交 Git。登入流程驗證 `state`、PKCE、Google JWKS、issuer、audience 與 Email verified；D1 不保存 access token、refresh token 或 Google 密碼。
