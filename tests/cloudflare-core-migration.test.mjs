@@ -7,6 +7,7 @@ const coreMigration = readFileSync(new URL('../drizzle/0004_cloudflare_core.sql'
 const seedMigration = readFileSync(new URL('../drizzle/0005_seed_government_rentals.sql', import.meta.url), 'utf8');
 const coordinateMigration = readFileSync(new URL('../drizzle/0006_fixed_absolute_coordinates.sql', import.meta.url), 'utf8');
 const professorSourceMigration = readFileSync(new URL('../drizzle/0007_official_professor_sources.sql', import.meta.url), 'utf8');
+const academicUnitsMigration = readFileSync(new URL('../drizzle/0008_academic_units_and_rating_dimensions.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -25,8 +26,35 @@ function databaseWithCore() {
   `);
   apply(database, coreMigration);
   apply(database, professorSourceMigration);
+  apply(database, academicUnitsMigration);
   return database;
 }
+
+test('academic units and four professor rating dimensions migrate with constraints', () => {
+  const database = databaseWithCore();
+  database.exec(`
+    INSERT INTO academic_departments
+      (id, university_id, college, name, unit_type, official_source_url, created_at, updated_at)
+    VALUES
+      ('dept-1', 'ntu', '工學院', '機械工程學系', 'department',
+       'https://www.ntu.edu.tw/academics/academics_list.html', 'now', 'now');
+    INSERT INTO users (id) VALUES ('dimension-user');
+    INSERT INTO professors (id, university_id, department, name, created_at, updated_at)
+    VALUES ('dimension-prof', 'ntu', '機械工程學系', '林老師', 'now', 'now');
+    INSERT INTO professor_ratings
+      (id, professor_id, user_id, easy_to_pass_score, attitude_score, workload_score,
+       exam_difficulty_score, grading_standard_score, created_at, updated_at)
+    VALUES ('dimension-rating', 'dimension-prof', 'dimension-user', 3, 5, 2, 4, 3, 'now', 'now');
+  `);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM academic_departments').get().count, 1);
+  assert.equal(database.prepare(`SELECT attitude_score FROM professor_ratings
+    WHERE id = 'dimension-rating'`).get().attitude_score, 5);
+  assert.throws(() => database.exec(`UPDATE professor_ratings SET workload_score = 0
+    WHERE id = 'dimension-rating'`), /CHECK/);
+  assert.throws(() => database.exec(`INSERT INTO academic_departments
+    (id, university_id, college, name, unit_type, official_source_url, created_at, updated_at)
+    VALUES ('dept-2', 'ntu', '其他學院', '機械工程學系', 'department', 'https://www.ntu.edu.tw/', 'now', 'now')`), /UNIQUE/);
+});
 
 test('professors retain an official public source URL', () => {
   const database = databaseWithCore();

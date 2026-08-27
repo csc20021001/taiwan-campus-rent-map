@@ -11,20 +11,20 @@ const hasAdsenseClient = /^ca-pub-\d+$/.test(adsenseClient);
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://map.scmwcscr.com'),
-  title: '校邊 Campus Nest｜大學周邊租屋地圖',
+  title: 'WZUNAA｜大學周邊租屋地圖',
   description: '從地圖探索臺灣國立大學周邊租屋地點；Google 登入後可回報實付租金與住過評分。',
   openGraph: {
     type: 'website',
     locale: 'zh_TW',
     url: 'https://map.scmwcscr.com',
-    siteName: '校邊 Campus Nest',
-    title: '校邊 Campus Nest｜大學周邊租屋地圖',
+    siteName: 'WZUNAA',
+    title: 'WZUNAA｜大學周邊租屋地圖',
     description: '從地圖探索臺灣國立大學周邊租屋地點；登入後回報實付租金與住過評分。',
-    images: [{ url: '/og.png', width: 1200, height: 630, alt: '校邊 Campus Nest 大學周邊租屋地圖' }],
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'WZUNAA 大學周邊租屋地圖' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: '校邊 Campus Nest｜大學周邊租屋地圖',
+    title: 'WZUNAA｜大學周邊租屋地圖',
     description: '從地圖探索臺灣國立大學周邊租屋地點；登入後回報實付租金與住過評分。',
     images: ['/og.png'],
   },

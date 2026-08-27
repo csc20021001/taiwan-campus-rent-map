@@ -1,4 +1,4 @@
-# 校邊 Campus Nest
+# WZUNAA
 
 以地圖為核心的臺灣國立大學周邊租屋地點與匿名聚合回報平台。網站不是招租廣告平台：不保存房東電話、即時空房、押金、契約或房間照片；使用者登入後可新增「有人住過的地點」，並回報自己實際支付的月租與 1～5 分住過評分。
 
@@ -12,7 +12,7 @@
 - Google OpenID Connect、PKCE、HttpOnly 工作階段
 - 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
-- 教授搜尋及「好不好過」1～5 分評分；第一版不提供自由文字留言
+- 老師搜尋及「老師態度、作業量、考試難易、給分標準」四項 1～5 分評分；不提供自由文字留言
 - AdSense 版位、隱私權政策、服務條款與 `ads.txt`
 
 ## Cloudflare 架構
@@ -37,7 +37,8 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `universities`：學校與校區座標
 - `users`：內部使用者、唯一 `google_sub`；Email 不公開
 - `auth_sessions`：工作階段 token 的 SHA-256 雜湊
-- `professors`、`professor_ratings`：教授基本資料與唯一 `(user_id, professor_id)` 評分
+- `academic_departments`：11 校公開官方網站所列系所、研究所與學位單位
+- `professors`、`professor_ratings`：老師基本資料與唯一 `(user_id, professor_id)` 四項評分
 - `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
 - `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
 - `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
@@ -60,7 +61,8 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 | POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
 | GET | `/api/professors` | `university_id`、`department`、`search` 篩選 |
 | GET | `/api/professors/:id` | 教授平均評分與人數 |
-| POST | `/api/professors/:id/rating` | 登入後 UPSERT 好不好過評分 |
+| GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
+| POST | `/api/professors/:id/rating` | 登入後 UPSERT 四項老師評分 |
 
 ## 環境變數
 
@@ -100,8 +102,10 @@ npm run dev
 - `drizzle/0004_cloudflare_core.sql`：教授、租屋地點、回報、限流、UNIQUE constraints 與 indexes
 - `drizzle/0005_seed_government_rentals.sql`：本次 55 筆輸入去重後的 D1 初始地點
 - `drizzle/0006_fixed_absolute_coordinates.sql`：把共用街道中心點的房屋改為固定、未驗證的絕對座標
+- `drizzle/0008_academic_units_and_rating_dimensions.sql`：新增官方系所資料表與四項老師評分欄位
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
+- `db/department-seeds.ts`：收錄 11 校官方學術單位頁所列系所、研究所、學位學程與教學單位
 
 ```bash
 npm run seed:build
@@ -128,7 +132,7 @@ npx wrangler d1 migrations apply <DATABASE_NAME> --remote
 ]
 ```
 
-目前首批收錄 11 校、167 筆官方公開師資資料，涵蓋每校一個已核對的系所或研究所；其餘系所逐批建置。建置腳本會拒絕非 HTTPS、非該校官方網域的來源網址，論壇及第三方名錄不會被匯入。
+目前收錄 11 校、777 個去重後官方學術單位，以及 167 筆官方公開師資資料。所有系所都可在篩選器查看；老師姓名必須能在校方公開師資頁核對後才會顯示，論壇及第三方名錄不會被匯入。
 
 ## 品質檢查
 

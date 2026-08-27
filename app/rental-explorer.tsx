@@ -361,7 +361,7 @@ export function RentalExplorer() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <Link className="brand" href="/" aria-label="校邊首頁"><span className="brand-mark"><MapPin size={19} /></span><span>校邊<small>Campus Nest</small></span></Link>
+        <Link className="brand" href="/" aria-label="WZUNAA 首頁"><span className="brand-mark"><MapPin size={19} /></span><span>WZUNAA</span></Link>
         <label className="school-search"><MapPin size={14} /><select value={schoolId} onChange={(event) => chooseSchool(event.target.value)} aria-label="選擇學校">
           {universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select><ChevronDown size={14} /></label>

@@ -69,6 +69,21 @@ export const reviews = sqliteTable('reviews', {
   index('idx_reviews_listing_created').on(table.listingId, table.createdAt),
 ]);
 
+export const academicDepartments = sqliteTable('academic_departments', {
+  id: text('id').primaryKey(),
+  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  college: text('college').notNull(),
+  name: text('name').notNull(),
+  unitType: text('unit_type').notNull(),
+  officialSourceUrl: text('official_source_url').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_academic_departments_university_college').on(table.universityId, table.college, table.name),
+  index('idx_academic_departments_name').on(table.name),
+  uniqueIndex('idx_academic_departments_identity').on(table.universityId, table.name),
+]);
+
 export const professors = sqliteTable('professors', {
   id: text('id').primaryKey(),
   universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
@@ -89,6 +104,10 @@ export const professorRatings = sqliteTable('professor_ratings', {
   professorId: text('professor_id').notNull().references(() => professors.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   easyToPassScore: integer('easy_to_pass_score').notNull(),
+  attitudeScore: integer('attitude_score').notNull().default(3),
+  workloadScore: integer('workload_score').notNull().default(3),
+  examDifficultyScore: integer('exam_difficulty_score').notNull().default(3),
+  gradingStandardScore: integer('grading_standard_score').notNull().default(3),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [

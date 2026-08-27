@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: '服務條款｜校邊 Campus Nest',
-  description: '使用校邊 Campus Nest 新增租屋地點、回報租金與評分時適用的服務規範。',
+  title: '服務條款｜WZUNAA',
+  description: '使用 WZUNAA 新增租屋地點、回報租金與評分時適用的服務規範。',
 };
 
 export default function TermsPage() {
@@ -17,7 +17,7 @@ export default function TermsPage() {
 
         <section>
           <h2>服務定位</h2>
-          <p>校邊 Campus Nest 提供校園周邊租屋地點、匿名聚合租金與評分資訊。本站不是招租平台、房仲、出租人、承租人或付款代收方，也不提供即時空房、房東聯絡方式或交易服務。</p>
+          <p>WZUNAA 提供校園周邊租屋地點、匿名聚合租金與評分資訊。本站不是招租平台、房仲、出租人、承租人或付款代收方，也不提供即時空房、房東聯絡方式或交易服務。</p>
         </section>
 
         <section>

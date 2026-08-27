@@ -8,7 +8,7 @@ export const DEFAULT_VECTOR_TILE_URL = 'https://tiles.openfreemap.org/planet';
 export function createCampusMapStyle(vectorTileUrl = DEFAULT_VECTOR_TILE_URL) {
   return /** @type {import('maplibre-gl').StyleSpecification} */ ({
     version: 8,
-    name: '校邊極簡校園底圖',
+    name: 'WZUNAA 極簡校園底圖',
     sources: {
       openmaptiles: {
         type: 'vector',

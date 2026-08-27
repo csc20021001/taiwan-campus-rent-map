@@ -57,6 +57,13 @@
       "when": 1787838000000,
       "tag": "0007_official_professor_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787841000000,
+      "tag": "0008_academic_units_and_rating_dimensions",
+      "breakpoints": true
     }
   ]
 }

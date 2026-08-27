@@ -5,6 +5,7 @@ import { universities } from '../app/data';
 import { rentalSeeds } from './rental-seeds.generated';
 import { fixedAbsoluteCoordinate } from './rental-coordinate-overrides.mjs';
 import { professorSeeds } from './professors-seeds.generated';
+import { departmentSeeds } from './department-seeds';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -50,6 +51,22 @@ async function ensureProfessorOfficialSourceUrl() {
   }
 }
 
+async function ensureProfessorRatingDimensions() {
+  const db = getD1();
+  const tableInfo = await db.prepare('PRAGMA table_info(professor_ratings)').all<{ name: string }>();
+  if (tableInfo.results.length === 0) return;
+  const existing = new Set(tableInfo.results.map((column) => column.name));
+  const additions = [
+    ['attitude_score', 'ALTER TABLE professor_ratings ADD COLUMN attitude_score INTEGER NOT NULL DEFAULT 3 CHECK (attitude_score BETWEEN 1 AND 5)'],
+    ['workload_score', 'ALTER TABLE professor_ratings ADD COLUMN workload_score INTEGER NOT NULL DEFAULT 3 CHECK (workload_score BETWEEN 1 AND 5)'],
+    ['exam_difficulty_score', 'ALTER TABLE professor_ratings ADD COLUMN exam_difficulty_score INTEGER NOT NULL DEFAULT 3 CHECK (exam_difficulty_score BETWEEN 1 AND 5)'],
+    ['grading_standard_score', 'ALTER TABLE professor_ratings ADD COLUMN grading_standard_score INTEGER NOT NULL DEFAULT 3 CHECK (grading_standard_score BETWEEN 1 AND 5)'],
+  ] as const;
+  for (const [column, sql] of additions) {
+    if (!existing.has(column)) await db.prepare(sql).run();
+  }
+}
+
 async function runBatches(statements: D1PreparedStatement[], size = 80) {
   const db = getD1();
   for (let index = 0; index < statements.length; index += size) {
@@ -60,6 +77,17 @@ async function runBatches(statements: D1PreparedStatement[], size = 80) {
 async function initializeCoreTables() {
   const db = getD1();
   await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS academic_departments (
+      id TEXT PRIMARY KEY NOT NULL,
+      university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
+      college TEXT NOT NULL,
+      name TEXT NOT NULL,
+      unit_type TEXT NOT NULL CHECK (unit_type IN ('department', 'institute', 'program', 'academic-unit')),
+      official_source_url TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (university_id, name)
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS professors (
       id TEXT PRIMARY KEY NOT NULL,
       university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
@@ -74,6 +102,10 @@ async function initializeCoreTables() {
       professor_id TEXT NOT NULL REFERENCES professors(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       easy_to_pass_score INTEGER NOT NULL CHECK (easy_to_pass_score BETWEEN 1 AND 5),
+      attitude_score INTEGER NOT NULL DEFAULT 3 CHECK (attitude_score BETWEEN 1 AND 5),
+      workload_score INTEGER NOT NULL DEFAULT 3 CHECK (workload_score BETWEEN 1 AND 5),
+      exam_difficulty_score INTEGER NOT NULL DEFAULT 3 CHECK (exam_difficulty_score BETWEEN 1 AND 5),
+      grading_standard_score INTEGER NOT NULL DEFAULT 3 CHECK (grading_standard_score BETWEEN 1 AND 5),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`),
@@ -122,7 +154,11 @@ async function initializeCoreTables() {
     )`),
   ]);
   await ensureProfessorOfficialSourceUrl();
+  await ensureProfessorRatingDimensions();
   await db.batch([
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_departments_identity ON academic_departments(university_id, name)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_academic_departments_university_college ON academic_departments(university_id, college, name)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_academic_departments_name ON academic_departments(name)'),
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_identity ON professors(university_id, department, name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_university ON professors(university_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_department ON professors(department)'),
@@ -140,6 +176,25 @@ async function initializeCoreTables() {
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_aggregate ON rental_reports(rental_location_id, is_valid, is_outlier)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_api_rate_limits_cleanup ON api_rate_limits(window_started_at)'),
   ]);
+}
+
+async function seedDepartments() {
+  const db = getD1();
+  const timestamp = '2026-08-27T00:00:00.000Z';
+  const statements = departmentSeeds.map((seed) => db.prepare(`
+    INSERT INTO academic_departments (
+      id, university_id, college, name, unit_type, official_source_url, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(university_id, name) DO UPDATE SET
+      college = excluded.college,
+      unit_type = excluded.unit_type,
+      official_source_url = excluded.official_source_url,
+      updated_at = excluded.updated_at
+  `).bind(
+    seed.id, seed.universityId, seed.college, seed.name, seed.unitType,
+    seed.sourceUrl, timestamp, timestamp,
+  ));
+  await runBatches(statements);
 }
 
 async function seedProfessors() {
@@ -305,6 +360,7 @@ async function initializeDatabase() {
   await db.batch(schoolSeeds);
 
   await initializeCoreTables();
+  await seedDepartments();
   await seedProfessors();
   await seedRentalLocations();
 }

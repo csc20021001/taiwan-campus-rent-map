@@ -369,7 +369,7 @@ export function CampusExplorer() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="校邊首頁"><span className="brand-mark"><Home size={20} strokeWidth={2.4} /></span><span>校邊</span><small>Campus Nest</small></a>
+        <a className="brand" href="#top" aria-label="WZUNAA 首頁"><span className="brand-mark"><Home size={20} strokeWidth={2.4} /></span><span>WZUNAA</span></a>
         <label className="school-search">
           <Search size={17} aria-hidden="true" /><span className="sr-only">選擇學校</span>
           <select value={schoolId} onChange={(event) => chooseSchool(event.target.value)}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>

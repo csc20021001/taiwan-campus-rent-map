@@ -14,6 +14,7 @@ const counts = database.prepare(`SELECT
   (SELECT COUNT(*) FROM rental_locations) AS rentalLocations,
   (SELECT COUNT(*) FROM rental_location_universities) AS rentalAssociations,
   (SELECT COUNT(*) FROM rental_reports) AS rentalReports,
+  (SELECT COUNT(*) FROM academic_departments) AS academicDepartments,
   (SELECT COUNT(*) FROM professors) AS professors,
   (SELECT COUNT(*) FROM professor_ratings) AS professorRatings,
   (SELECT COUNT(*) FROM users) AS users`).get();
