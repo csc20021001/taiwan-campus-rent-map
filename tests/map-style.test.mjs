@@ -24,3 +24,10 @@ test('production map explicitly bundles and configures the MapLibre worker', () 
   assert.match(rentalExplorer, /maplibre-gl-worker\.mjs\?worker&url/);
   assert.match(rentalExplorer, /setWorkerUrl\(workerModule\.default\)/);
 });
+
+test('map markers use exact subpixel positioning and source-only copy stays hidden', () => {
+  assert.equal((rentalExplorer.match(/subpixelPositioning: true/g) ?? []).length, 3);
+  assert.doesNotMatch(rentalExplorer, /住過的人回報/);
+  assert.doesNotMatch(rentalExplorer, /政府歷史租賃參考/);
+  assert.doesNotMatch(rentalExplorer, /這筆資料已納入上方平均租金/);
+});

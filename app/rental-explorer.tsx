@@ -215,7 +215,7 @@ export function RentalExplorer() {
       const campusLabel = document.createElement('span');
       campusLabel.textContent = school.shortName;
       campusElement.appendChild(campusLabel);
-      markers.current.push(new maplibregl.Marker({ element: campusElement, anchor: 'center' })
+      markers.current.push(new maplibregl.Marker({ element: campusElement, anchor: 'center', subpixelPositioning: true })
         .setLngLat(absoluteLngLat(school.latitude, school.longitude)).addTo(map));
 
       filteredRentals.forEach((rental) => {
@@ -237,7 +237,7 @@ export function RentalExplorer() {
           setDetailOpen(true);
           setMobilePanel(false);
         });
-        markers.current.push(new maplibregl.Marker({ element, anchor: 'bottom' })
+        markers.current.push(new maplibregl.Marker({ element, anchor: 'bottom', subpixelPositioning: true })
           .setLngLat(absoluteLngLat(rental.latitude, rental.longitude)).addTo(map));
       });
 
@@ -245,7 +245,7 @@ export function RentalExplorer() {
         const element = document.createElement('div');
         element.className = `draft-marker${locationConfirmed ? ' is-confirmed' : ''}`;
         element.textContent = locationConfirmed ? '新地點' : '點地圖定位';
-        markers.current.push(new maplibregl.Marker({ element, anchor: 'bottom' })
+        markers.current.push(new maplibregl.Marker({ element, anchor: 'bottom', subpixelPositioning: true })
           .setLngLat(absoluteLngLat(draftLatitude, draftLongitude)).addTo(map));
       }
     });
@@ -376,7 +376,7 @@ export function RentalExplorer() {
       <section className="workspace">
         <aside className={`listing-panel${mobilePanel ? ' is-open' : ''}`}>
           <button className="mobile-sheet-close" onClick={() => setMobilePanel(false)} aria-label="關閉列表"><X size={16} /></button>
-          <div className="panel-heading"><p className="eyebrow"><ShieldCheck size={13} />住過的人回報</p><div className="heading-row"><span><h1>{school.shortName}周邊租屋地點</h1><p>{loading ? '讀取中…' : `${rentals.length} 個不重複地點`}</p></span></div></div>
+          <div className="panel-heading"><div className="heading-row"><span><h1>{school.shortName}周邊租屋地點</h1><p>{loading ? '讀取中…' : `${rentals.length} 個不重複地點`}</p></span></div></div>
           <div className="quick-filters">
             {([['all', '全部'], ['reported', '已有回報'], ['under10', '平均萬元內'], ['government', '政府地點']] as const).map(([id, label]) =>
               <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>)}
@@ -393,7 +393,6 @@ export function RentalExplorer() {
                 <span><small>所有來源平均租金</small><b>{rental.averageRent === null ? '尚無資料' : `NT$${money.format(rental.averageRent)}`}</b></span>
                 <span><small>所有評分平均</small><b>{rental.averageRating === null ? '—' : `★ ${rental.averageRating.toFixed(1)}`}</b></span>
               </span>
-              {rental.referenceRent !== null && <span className="reference-rent">政府歷史租賃參考：NT${money.format(rental.referenceRent)} / 月</span>}
               {rental.latitude === null && <span className="coordinate-warning">位置待確認，暫不顯示 Marker</span>}
             </button>)}
           </div>
@@ -417,7 +416,6 @@ export function RentalExplorer() {
                 <article><Star size={17} /><small>所有評分平均</small><strong>{selected.averageRating === null ? '尚無評分' : `${selected.averageRating.toFixed(1)} / 5`}</strong></article>
                 <article><ShieldCheck size={17} /><small>使用者有效回報</small><strong>{selected.rentReportCount} 人</strong></article>
               </div>
-              {selected.referenceRent !== null && <div className="government-reference"><strong>政府歷史租賃參考</strong><span>NT${money.format(selected.referenceRent)} / 月</span><small>這筆資料已納入上方平均租金；每個來源各計一筆。</small></div>}
               <form className="rental-report-form" onSubmit={submitReport}>
                 <h3>回報你實際住過的價格</h3><p>同一 Google 帳號只保留一筆，重新送出會更新。</p>
                 <label>每月實付租金<input type="number" min="1000" max="200000" step="1" required value={monthlyRent} onChange={(event) => setMonthlyRent(event.target.value)} placeholder="例如 8500" /></label>
