@@ -312,7 +312,7 @@ export function RentalExplorer() {
 
   function startAdd() {
     if (!auth.user) {
-      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/?add=1')}`);
+      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/rentals?add=1')}`);
       return;
     }
     setFormError('');
@@ -352,7 +352,7 @@ export function RentalExplorer() {
     event.preventDefault();
     if (!selected) return;
     if (!auth.user) {
-      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/')}`);
+      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/rentals')}`);
       return;
     }
     setSubmitting(true);
@@ -376,7 +376,7 @@ export function RentalExplorer() {
     event.preventDefault();
     if (!selected) return;
     if (!auth.user) {
-      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/')}`);
+      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/rentals')}`);
       return;
     }
     setCommentSubmitting(true);
@@ -413,7 +413,7 @@ export function RentalExplorer() {
         <nav className="top-actions">
           <Link className="professor-nav-button" href="/professors"><Star size={15} fill="currentColor" />教授評分</Link>
           {!authLoading && (auth.user ? <button className="ghost-button" onClick={() => void logout()}><LogOut size={14} />登出</button> :
-            <a className="ghost-button" href="/api/auth/google/start?returnTo=%2F"><LogIn size={14} />Google 登入</a>)}
+            <a className="ghost-button" href="/api/auth/google/start?returnTo=%2Frentals"><LogIn size={14} />Google 登入</a>)}
           <button className="publish-button" onClick={startAdd}><Plus size={15} />新增地點</button>
         </nav>
       </header>

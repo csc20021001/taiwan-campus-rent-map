@@ -28,23 +28,24 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: '找不到教授資料。' }, { status: 404 });
   }
   const now = new Date().toISOString();
-  const { attitudeScore, workloadScore, examDifficultyScore, gradingStandardScore } = validated.value;
-  const legacyScore = Math.round((attitudeScore + workloadScore + examDifficultyScore + gradingStandardScore) / 4);
+  const { attitudeScore, learningScore, workloadScore, examDifficultyScore, gradingStandardScore } = validated.value;
+  const legacyScore = Math.round((attitudeScore + learningScore + workloadScore + examDifficultyScore + gradingStandardScore) / 5);
   await db.prepare(`INSERT INTO professor_ratings (
       id, professor_id, user_id, easy_to_pass_score,
-      attitude_score, workload_score, exam_difficulty_score, grading_standard_score,
+      attitude_score, learning_score, workload_score, exam_difficulty_score, grading_standard_score,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, professor_id) DO UPDATE SET
       easy_to_pass_score = excluded.easy_to_pass_score,
       attitude_score = excluded.attitude_score,
+      learning_score = excluded.learning_score,
       workload_score = excluded.workload_score,
       exam_difficulty_score = excluded.exam_difficulty_score,
       grading_standard_score = excluded.grading_standard_score,
       updated_at = excluded.updated_at`)
     .bind(
       crypto.randomUUID(), id, user.id, legacyScore,
-      attitudeScore, workloadScore, examDifficultyScore, gradingStandardScore,
+      attitudeScore, learningScore, workloadScore, examDifficultyScore, gradingStandardScore,
       now, now,
     ).run();
   return NextResponse.json({ professor: await getProfessor(id) });

@@ -105,6 +105,7 @@ export const professorRatings = sqliteTable('professor_ratings', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   easyToPassScore: integer('easy_to_pass_score').notNull(),
   attitudeScore: integer('attitude_score').notNull().default(3),
+  learningScore: integer('learning_score').notNull().default(3),
   workloadScore: integer('workload_score').notNull().default(3),
   examDifficultyScore: integer('exam_difficulty_score').notNull().default(3),
   gradingStandardScore: integer('grading_standard_score').notNull().default(3),

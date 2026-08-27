@@ -10,7 +10,7 @@ export default function TermsPage() {
   return (
     <main className="legal-page">
       <article className="legal-card">
-        <Link className="legal-back" href="/">← 返回租屋地圖</Link>
+        <Link className="legal-back" href="/">← 返回首頁</Link>
         <p className="legal-kicker">WZUNAA · CAMPUS HOUSING TAIWAN</p>
         <h1>服務條款</h1>
         <p className="legal-updated">生效日期：2026 年 8 月 26 日</p>
@@ -45,7 +45,8 @@ export default function TermsPage() {
         </section>
 
         <nav className="legal-nav" aria-label="網站政策">
-          <Link href="/">租屋地圖</Link>
+          <Link href="/rentals">租屋地圖</Link>
+          <Link href="/professors">教授評分</Link>
           <Link href="/privacy">隱私權政策</Link>
         </nav>
       </article>

@@ -58,6 +58,7 @@ async function ensureProfessorRatingDimensions() {
   const existing = new Set(tableInfo.results.map((column) => column.name));
   const additions = [
     ['attitude_score', 'ALTER TABLE professor_ratings ADD COLUMN attitude_score INTEGER NOT NULL DEFAULT 3 CHECK (attitude_score BETWEEN 1 AND 5)'],
+    ['learning_score', 'ALTER TABLE professor_ratings ADD COLUMN learning_score INTEGER NOT NULL DEFAULT 3 CHECK (learning_score BETWEEN 1 AND 5)'],
     ['workload_score', 'ALTER TABLE professor_ratings ADD COLUMN workload_score INTEGER NOT NULL DEFAULT 3 CHECK (workload_score BETWEEN 1 AND 5)'],
     ['exam_difficulty_score', 'ALTER TABLE professor_ratings ADD COLUMN exam_difficulty_score INTEGER NOT NULL DEFAULT 3 CHECK (exam_difficulty_score BETWEEN 1 AND 5)'],
     ['grading_standard_score', 'ALTER TABLE professor_ratings ADD COLUMN grading_standard_score INTEGER NOT NULL DEFAULT 3 CHECK (grading_standard_score BETWEEN 1 AND 5)'],
@@ -103,6 +104,7 @@ async function initializeCoreTables() {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       easy_to_pass_score INTEGER NOT NULL CHECK (easy_to_pass_score BETWEEN 1 AND 5),
       attitude_score INTEGER NOT NULL DEFAULT 3 CHECK (attitude_score BETWEEN 1 AND 5),
+      learning_score INTEGER NOT NULL DEFAULT 3 CHECK (learning_score BETWEEN 1 AND 5),
       workload_score INTEGER NOT NULL DEFAULT 3 CHECK (workload_score BETWEEN 1 AND 5),
       exam_difficulty_score INTEGER NOT NULL DEFAULT 3 CHECK (exam_difficulty_score BETWEEN 1 AND 5),
       grading_standard_score INTEGER NOT NULL DEFAULT 3 CHECK (grading_standard_score BETWEEN 1 AND 5),

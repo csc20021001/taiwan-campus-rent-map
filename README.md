@@ -5,6 +5,7 @@
 ## MVP 功能
 
 - 11 所學校：臺大、清大、陽明交大、成大、中央、中興、中山、中正、臺科、北科、宜大
+- 首頁先選擇「查房子」或「查教授」，租屋地圖位於 `/rentals`
 - MapLibre GL JS + OpenStreetMap／OpenFreeMap 極簡向量底圖，不需要商業地圖 API 金鑰
 - Marker、地址、租金與評分全部由 Cloudflare D1 提供
 - 52 個政府資料去重後地點、55 筆學校關聯，以及 1 個管理員建立的宜蘭地點
@@ -13,7 +14,7 @@
 - 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
 - 租屋地點評論可公開閱讀；使用 Google 登入後可發表 4～500 字評論
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
-- 老師搜尋及「老師態度、作業量、考試難易、給分標準」四項 1～5 分評分；不提供自由文字留言
+- 老師姓名遮罩顯示；可依「老師態度、學習收穫、作業量、考試難易、給分標準」五項給予 1～5 分評分
 - AdSense 版位、隱私權政策、服務條款與 `ads.txt`
 
 ## Cloudflare 架構
@@ -39,7 +40,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `users`：內部使用者、唯一 `google_sub`；Email 不公開
 - `auth_sessions`：工作階段 token 的 SHA-256 雜湊
 - `academic_departments`：11 校公開官方網站所列系所、研究所與學位單位
-- `professors`、`professor_ratings`：老師基本資料與唯一 `(user_id, professor_id)` 四項評分
+- `professors`、`professor_ratings`：老師基本資料與唯一 `(user_id, professor_id)` 五項評分
 - `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
 - `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
 - `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
@@ -66,7 +67,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 | GET | `/api/professors` | `university_id`、`department`、`search` 篩選 |
 | GET | `/api/professors/:id` | 教授平均評分與人數 |
 | GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
-| POST | `/api/professors/:id/rating` | 登入後 UPSERT 四項老師評分 |
+| POST | `/api/professors/:id/rating` | 登入後 UPSERT 五項老師評分 |
 
 ## 環境變數
 
@@ -108,6 +109,7 @@ npm run dev
 - `drizzle/0006_fixed_absolute_coordinates.sql`：把共用街道中心點的房屋改為固定、未驗證的絕對座標
 - `drizzle/0008_academic_units_and_rating_dimensions.sql`：新增官方系所資料表與四項老師評分欄位
 - `drizzle/0009_rental_comments.sql`：新增公開租屋評論、內容長度限制與查詢 indexes
+- `drizzle/0010_professor_learning_score.sql`：新增「學習收穫」評分欄位與 1～5 分限制
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 - `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域

@@ -9,6 +9,7 @@ const coordinateMigration = readFileSync(new URL('../drizzle/0006_fixed_absolute
 const professorSourceMigration = readFileSync(new URL('../drizzle/0007_official_professor_sources.sql', import.meta.url), 'utf8');
 const academicUnitsMigration = readFileSync(new URL('../drizzle/0008_academic_units_and_rating_dimensions.sql', import.meta.url), 'utf8');
 const rentalCommentsMigration = readFileSync(new URL('../drizzle/0009_rental_comments.sql', import.meta.url), 'utf8');
+const professorLearningMigration = readFileSync(new URL('../drizzle/0010_professor_learning_score.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -29,6 +30,7 @@ function databaseWithCore() {
   apply(database, professorSourceMigration);
   apply(database, academicUnitsMigration);
   apply(database, rentalCommentsMigration);
+  apply(database, professorLearningMigration);
   return database;
 }
 
@@ -50,7 +52,7 @@ test('rental comments are public records linked to a location and user', () => {
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM pragma_index_list('rental_comments') WHERE name = 'idx_rental_comments_location_created'").get().count, 1);
 });
 
-test('academic units and four professor rating dimensions migrate with constraints', () => {
+test('academic units and five professor rating dimensions migrate with constraints', () => {
   const database = databaseWithCore();
   database.exec(`
     INSERT INTO academic_departments
@@ -62,13 +64,15 @@ test('academic units and four professor rating dimensions migrate with constrain
     INSERT INTO professors (id, university_id, department, name, created_at, updated_at)
     VALUES ('dimension-prof', 'ntu', '機械工程學系', '林老師', 'now', 'now');
     INSERT INTO professor_ratings
-      (id, professor_id, user_id, easy_to_pass_score, attitude_score, workload_score,
+      (id, professor_id, user_id, easy_to_pass_score, attitude_score, learning_score, workload_score,
        exam_difficulty_score, grading_standard_score, created_at, updated_at)
-    VALUES ('dimension-rating', 'dimension-prof', 'dimension-user', 3, 5, 2, 4, 3, 'now', 'now');
+    VALUES ('dimension-rating', 'dimension-prof', 'dimension-user', 3, 5, 4, 2, 4, 3, 'now', 'now');
   `);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM academic_departments').get().count, 1);
   assert.equal(database.prepare(`SELECT attitude_score FROM professor_ratings
     WHERE id = 'dimension-rating'`).get().attitude_score, 5);
+  assert.equal(database.prepare(`SELECT learning_score FROM professor_ratings
+    WHERE id = 'dimension-rating'`).get().learning_score, 4);
   assert.throws(() => database.exec(`UPDATE professor_ratings SET workload_score = 0
     WHERE id = 'dimension-rating'`), /CHECK/);
   assert.throws(() => database.exec(`INSERT INTO academic_departments

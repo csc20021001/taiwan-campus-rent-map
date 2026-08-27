@@ -10,7 +10,7 @@ export default function PrivacyPage() {
   return (
     <main className="legal-page">
       <article className="legal-card">
-        <Link className="legal-back" href="/">← 返回租屋地圖</Link>
+        <Link className="legal-back" href="/">← 返回首頁</Link>
         <p className="legal-kicker">WZUNAA · CAMPUS HOUSING TAIWAN</p>
         <h1>隱私權政策</h1>
         <p className="legal-updated">生效日期：2026 年 8 月 26 日</p>
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <h2>我們蒐集的資料</h2>
           <ul>
             <li>Google 登入後提供的帳號識別碼、姓名與電子郵件地址。</li>
-            <li>你主動新增的租屋地點，以及回報的實付月租、住過評分或老師四項評分。</li>
+            <li>你主動新增的租屋地點，以及回報的實付月租、住過評分或老師五項評分。</li>
             <li>維持登入與防止濫用所需的工作階段、操作時間窗計數及基本技術紀錄。</li>
           </ul>
         </section>
@@ -45,7 +45,8 @@ export default function PrivacyPage() {
         </section>
 
         <nav className="legal-nav" aria-label="網站政策">
-          <Link href="/">租屋地圖</Link>
+          <Link href="/rentals">租屋地圖</Link>
+          <Link href="/professors">教授評分</Link>
           <Link href="/terms">服務條款</Link>
         </nav>
       </article>

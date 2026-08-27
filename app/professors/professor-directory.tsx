@@ -13,6 +13,7 @@ type Professor = {
   officialSourceUrl: string;
   averageRating: number | null;
   averageAttitude: number | null;
+  averageLearning: number | null;
   averageWorkload: number | null;
   averageExamDifficulty: number | null;
   averageGradingStandard: number | null;
@@ -29,10 +30,11 @@ type Department = {
 };
 
 type AuthState = { user: { id: string; name: string } | null; googleConfigured: boolean };
-type RatingScores = { attitudeScore: number; workloadScore: number; examDifficultyScore: number; gradingStandardScore: number };
+type RatingScores = { attitudeScore: number; learningScore: number; workloadScore: number; examDifficultyScore: number; gradingStandardScore: number };
 
 const initialScores: RatingScores = {
   attitudeScore: 3,
+  learningScore: 3,
   workloadScore: 3,
   examDifficultyScore: 3,
   gradingStandardScore: 3,
@@ -43,12 +45,14 @@ const ratingDimensions: Array<{
   label: string;
   low: string;
   high: string;
-  averageKey: keyof Pick<Professor, 'averageAttitude' | 'averageWorkload' | 'averageExamDifficulty' | 'averageGradingStandard'>;
+  hint?: string;
+  averageKey: keyof Pick<Professor, 'averageAttitude' | 'averageLearning' | 'averageWorkload' | 'averageExamDifficulty' | 'averageGradingStandard'>;
 }> = [
   { key: 'attitudeScore', label: '老師態度', low: '較不友善', high: '很友善', averageKey: 'averageAttitude' },
+  { key: 'learningScore', label: '學習收穫', low: '較少', high: '很多', hint: '越高代表越能學到東西', averageKey: 'averageLearning' },
   { key: 'workloadScore', label: '作業量', low: '很少', high: '很多', averageKey: 'averageWorkload' },
   { key: 'examDifficultyScore', label: '考試難易', low: '較容易', high: '很困難', averageKey: 'averageExamDifficulty' },
-  { key: 'gradingStandardScore', label: '給分標準', low: '較嚴格', high: '較寬鬆', averageKey: 'averageGradingStandard' },
+  { key: 'gradingStandardScore', label: '給分標準', low: '較嚴格', high: '較寬鬆', hint: '越高代表給分越寬鬆', averageKey: 'averageGradingStandard' },
 ];
 
 export function ProfessorDirectory() {
@@ -142,8 +146,8 @@ export function ProfessorDirectory() {
   }
 
   return <main className="professor-page">
-    <header className="professor-topbar"><Link href="/"><ArrowLeft size={15} />回租屋地圖</Link><span className="professor-brand"><GraduationCap size={18} />WZUNAA</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fprofessors"><LogIn size={14} />Google 登入</a>}</header>
-    <section className="professor-hero"><p><Star size={14} fill="currentColor" />教授評分專區</p><h1>{school.shortName}教授評分</h1><span>看看學生對教學、作業、考試與給分的評價</span></section>
+    <header className="professor-topbar"><Link href="/rentals"><ArrowLeft size={15} />回租屋地圖</Link><span className="professor-brand"><GraduationCap size={18} />WZUNAA</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fprofessors"><LogIn size={14} />Google 登入</a>}</header>
+    <section className="professor-hero"><p><Star size={14} fill="currentColor" />教授評分專區</p><h1>{school.shortName}教授評分</h1><span>看看學生對教學、學習收穫、作業、考試與給分的評價</span></section>
     <p className="professor-source-note"><ShieldCheck size={14} />已收錄 {departmentsLoading ? '…' : departments.length} 個系所與學位單位。{sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查看學校網站<ExternalLink size={11} /></a>}</p>
     <section className="professor-controls">
       <label>學校<select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -159,19 +163,19 @@ export function ProfessorDirectory() {
         <a className="professor-official-link" href={professor.officialSourceUrl} target="_blank" rel="noreferrer">查看官方師資頁<ExternalLink size={12} /></a>
         <div className="professor-score"><Star size={18} fill="currentColor" /><strong>{professor.averageRating === null ? '—' : professor.averageRating.toFixed(1)}</strong><span>/ 5 · {professor.ratingCount} 人評分</span></div>
         <dl className="professor-dimensions">
-          {ratingDimensions.map((dimension) => <div key={dimension.key}><dt>{dimension.label}</dt><dd>{professor[dimension.averageKey] === null ? '—' : professor[dimension.averageKey]!.toFixed(1)}</dd></div>)}
+          {ratingDimensions.map((dimension) => <div key={dimension.key}><dt>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</dt><dd>{professor[dimension.averageKey] === null ? '—' : professor[dimension.averageKey]!.toFixed(1)}</dd></div>)}
         </dl>
         {ratingTargetId !== professor.id && <button className="open-rating-button" type="button" onClick={() => openRating(professor)}>評這位老師</button>}
         {ratingTargetId === professor.id && <form className="rating-form" onSubmit={(event) => void submitRating(event, professor)}>
           <button className="rating-close" type="button" onClick={() => setRatingTargetId('')} aria-label="關閉評分"><X size={15} /></button>
           {ratingDimensions.map((dimension) => <fieldset key={dimension.key}>
-            <legend>{dimension.label}</legend>
+            <legend>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</legend>
             <div className="dimension-scale" aria-label={`${professor.name}的${dimension.label}`}>
               {[1, 2, 3, 4, 5].map((score) => <button className={scores[dimension.key] === score ? 'is-selected' : ''} type="button" key={score} aria-pressed={scores[dimension.key] === score} onClick={() => setScores((current) => ({ ...current, [dimension.key]: score }))}>{score}</button>)}
             </div>
             <small><span>1 {dimension.low}</span><span>5 {dimension.high}</span></small>
           </fieldset>)}
-          <button className="rating-submit" type="submit" disabled={submitting}>{submitting ? '送出中…' : <><Check size={14} />送出四項評分</>}</button>
+          <button className="rating-submit" type="submit" disabled={submitting}>{submitting ? '送出中…' : <><Check size={14} />送出五項評分</>}</button>
         </form>}
       </article>)}
     </section>
