@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fixedAbsoluteCoordinate } from '../db/rental-coordinate-overrides.mjs';
 
 const groups = {
   ntu: [
@@ -112,6 +113,8 @@ const migrationPath = resolve('drizzle/0005_seed_government_rentals.sql');
 const cache = existsSync(cachePath) ? JSON.parse(readFileSync(cachePath, 'utf8')) : {};
 
 async function geocode(address) {
+  const fixedCoordinate = fixedAbsoluteCoordinate(address);
+  if (fixedCoordinate) return fixedCoordinate;
   if (incompleteAddress(address)) {
     cache[address] ??= { latitude: null, longitude: null, coordinateSource: null, coordinatesVerified: false };
     return cache[address];
@@ -186,7 +189,7 @@ const output = `export type RentalSeed = {
   source: 'government';
   referenceRent: number | null;
   referenceRentSource: 'government';
-  coordinateSource: 'nominatim' | null;
+  coordinateSource: 'nominatim' | 'fixed_absolute_estimate' | null;
   coordinatesVerified: boolean;
 };
 

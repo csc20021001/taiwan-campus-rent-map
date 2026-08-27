@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import * as schema from './schema';
 import { universities } from '../app/data';
 import { rentalSeeds } from './rental-seeds.generated';
+import { fixedAbsoluteCoordinate } from './rental-coordinate-overrides.mjs';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -133,7 +134,9 @@ async function initializeCoreTables() {
 async function seedRentalLocations() {
   const db = getD1();
   const timestamp = '2026-08-26T00:00:00.000Z';
-  const locationSeeds = rentalSeeds.map((seed) => db.prepare(`
+  const locationSeeds = rentalSeeds.map((seed) => {
+    const coordinate = fixedAbsoluteCoordinate(seed.normalizedAddress) ?? seed;
+    return db.prepare(`
     INSERT INTO rental_locations (
       id, university_id, address, normalized_address, latitude, longitude, source,
       reference_rent, reference_rent_source, coordinate_source, coordinates_verified,
@@ -142,15 +145,21 @@ async function seedRentalLocations() {
     ON CONFLICT(normalized_address) DO UPDATE SET
       reference_rent = excluded.reference_rent,
       reference_rent_source = excluded.reference_rent_source,
-      latitude = COALESCE(rental_locations.latitude, excluded.latitude),
-      longitude = COALESCE(rental_locations.longitude, excluded.longitude),
-      coordinate_source = COALESCE(rental_locations.coordinate_source, excluded.coordinate_source),
+      latitude = CASE WHEN excluded.coordinate_source = 'fixed_absolute_estimate'
+        THEN excluded.latitude ELSE COALESCE(rental_locations.latitude, excluded.latitude) END,
+      longitude = CASE WHEN excluded.coordinate_source = 'fixed_absolute_estimate'
+        THEN excluded.longitude ELSE COALESCE(rental_locations.longitude, excluded.longitude) END,
+      coordinate_source = CASE WHEN excluded.coordinate_source = 'fixed_absolute_estimate'
+        THEN excluded.coordinate_source ELSE COALESCE(rental_locations.coordinate_source, excluded.coordinate_source) END,
+      coordinates_verified = CASE WHEN excluded.coordinate_source = 'fixed_absolute_estimate'
+        THEN 0 ELSE rental_locations.coordinates_verified END,
       updated_at = excluded.updated_at
   `).bind(
     seed.id, seed.primaryUniversityId, seed.address, seed.normalizedAddress,
-    seed.latitude, seed.longitude, seed.referenceRent, seed.coordinateSource,
-    seed.coordinatesVerified ? 1 : 0, timestamp, timestamp,
-  ));
+    coordinate.latitude, coordinate.longitude, seed.referenceRent, coordinate.coordinateSource,
+    coordinate.coordinatesVerified ? 1 : 0, timestamp, timestamp,
+  );
+  });
   await runBatches(locationSeeds);
 
   const associationSeeds = rentalSeeds.flatMap((seed) => seed.universityIds.map((universityId) => db.prepare(`

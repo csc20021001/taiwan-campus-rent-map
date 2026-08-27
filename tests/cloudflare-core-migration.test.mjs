@@ -5,6 +5,7 @@ import test from 'node:test';
 
 const coreMigration = readFileSync(new URL('../drizzle/0004_cloudflare_core.sql', import.meta.url), 'utf8');
 const seedMigration = readFileSync(new URL('../drizzle/0005_seed_government_rentals.sql', import.meta.url), 'utf8');
+const coordinateMigration = readFileSync(new URL('../drizzle/0006_fixed_absolute_coordinates.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -37,6 +38,22 @@ test('government seed is de-duplicated and associated with all supplied schools'
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM rental_locations
     WHERE normalized_address = '新竹市世傑路288號'`).get().count, 1);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_reports').get().count, 0);
+});
+
+test('fixed absolute migration separates shared street centroids', () => {
+  const database = databaseWithCore();
+  apply(database, seedMigration);
+  apply(database, coordinateMigration);
+  const rows = database.prepare(`SELECT normalized_address, latitude, longitude, coordinate_source
+    FROM rental_locations WHERE normalized_address LIKE '新竹市公道五路二段%'
+    ORDER BY normalized_address`).all();
+  assert.equal(rows.length, 4);
+  assert.equal(new Set(rows.map((row) => `${row.latitude},${row.longitude}`)).size, 4);
+  assert.equal(rows.every((row) => row.coordinate_source === 'fixed_absolute_estimate'), true);
+  const fixed = database.prepare(`SELECT latitude, longitude FROM rental_locations
+    WHERE normalized_address = '新竹市公道五路二段293號'`).get();
+  assert.equal(fixed.latitude, 24.79592);
+  assert.equal(fixed.longitude, 121.0103);
 });
 
 test('unique rating/report constraints and rent bounds are enforced', () => {

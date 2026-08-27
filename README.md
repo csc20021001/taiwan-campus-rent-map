@@ -5,7 +5,7 @@
 ## MVP 功能
 
 - 11 所學校：臺大、清大、陽明交大、成大、中央、中興、中山、中正、臺科、北科、宜大
-- MapLibre GL JS + OpenStreetMap／Protomaps PMTiles 極簡底圖，不需要商業地圖 API 金鑰
+- MapLibre GL JS + OpenStreetMap／OpenFreeMap 極簡向量底圖，不需要商業地圖 API 金鑰
 - Marker、地址、租金與評分全部由 Cloudflare D1 提供
 - 52 個政府資料去重後地點、55 筆學校關聯，以及 1 個管理員建立的宜蘭地點
 - 政府歷史租賃參考與有效使用者回報不分來源，合併計算平均租金；評分亦取所有有效回報平均
@@ -24,7 +24,7 @@ Cloudflare Worker（頁面與 REST API）
               ↓
 Cloudflare D1
 
-MapLibre → PMTiles / OSM Produced Work（只作底圖）
+MapLibre → OpenFreeMap / OSM Produced Work（只作底圖）
 Google OAuth → users / auth_sessions（不保存 Google token）
 ```
 
@@ -71,7 +71,7 @@ GOOGLE_CLIENT_ID=你的-client-id
 GOOGLE_CLIENT_SECRET=你的-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 
-NEXT_PUBLIC_PMTILES_URL=https://data.source.coop/protomaps/openstreetmap/v4.pmtiles
+NEXT_PUBLIC_VECTOR_TILE_URL=https://tiles.openfreemap.org/planet
 NEXT_PUBLIC_ADSENSE_CLIENT=
 NEXT_PUBLIC_ADSENSE_SLOT=
 ```
@@ -99,6 +99,7 @@ npm run dev
 
 - `drizzle/0004_cloudflare_core.sql`：教授、租屋地點、回報、限流、UNIQUE constraints 與 indexes
 - `drizzle/0005_seed_government_rentals.sql`：本次 55 筆輸入去重後的 D1 初始地點
+- `drizzle/0006_fixed_absolute_coordinates.sql`：把共用街道中心點的房屋改為固定、未驗證的絕對座標
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入未來提供的教授姓名、系所與學校
 
@@ -137,4 +138,4 @@ Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 
 
 ## 地圖授權
 
-畫面保留 OpenStreetMap contributors 與 Protomaps 署名。正式高流量營運建議把臺灣範圍 `.pmtiles` 放到自有 R2 或其他自有服務，並以 `NEXT_PUBLIC_PMTILES_URL` 切換；不要長期熱連結公共示範 archive。租屋 Marker 完全來自 D1，不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。
+畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；未確認的近似座標會明確標示。租屋資料不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。

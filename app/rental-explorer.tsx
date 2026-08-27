@@ -4,10 +4,10 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BarChart3, ChevronDown, CircleDollarSign, LocateFixed, LogIn, LogOut, MapPin, Plus, ShieldCheck, Star, X } from 'lucide-react';
 import type { Map as MapLibreMap, MapMouseEvent, Marker as MapLibreMarker } from 'maplibre-gl';
-import type { Protocol } from 'pmtiles';
 import { AdSenseSlot } from './adsense';
-import { createCampusMapStyle, DEFAULT_PMTILES_URL } from './campus-map-style.mjs';
+import { createCampusMapStyle, DEFAULT_VECTOR_TILE_URL } from './campus-map-style.mjs';
 import { universities } from './data';
+import { absoluteLngLat, boundsForLocations } from './map-geometry.mjs';
 
 type AuthUser = { id: string; email: string; name: string; avatarUrl: string | null };
 type AuthState = { user: AuthUser | null; googleConfigured: boolean };
@@ -32,8 +32,7 @@ type Rental = {
 type Filter = 'all' | 'reported' | 'under10' | 'government';
 
 const money = new Intl.NumberFormat('zh-TW');
-const pmtilesUrl = process.env.NEXT_PUBLIC_PMTILES_URL?.trim() || DEFAULT_PMTILES_URL;
-let pmtilesProtocol: Protocol | null = null;
+const vectorTileUrl = process.env.NEXT_PUBLIC_VECTOR_TILE_URL?.trim() || DEFAULT_VECTOR_TILE_URL;
 
 function sourceLabel(source: Rental['source']) {
   if (source === 'government') return '地點資料來源：政府開放資料';
@@ -54,7 +53,9 @@ export function RentalExplorer() {
   const mapNode = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<MapLibreMap | null>(null);
   const markers = useRef<MapLibreMarker[]>([]);
+  const fittedCoordinates = useRef('');
   const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState('');
   const [schoolId, setSchoolId] = useState('ntu');
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [reloadVersion, setReloadVersion] = useState(0);
@@ -139,16 +140,13 @@ export function RentalExplorer() {
   useEffect(() => {
     if (!mapNode.current || mapInstance.current) return;
     let active = true;
-    Promise.all([import('maplibre-gl'), import('pmtiles')]).then(([maplibregl, pmtiles]) => {
+    let resizeObserver: ResizeObserver | null = null;
+    import('maplibre-gl').then((maplibregl) => {
       if (!active || !mapNode.current || mapInstance.current) return;
-      if (!pmtilesProtocol) {
-        pmtilesProtocol = new pmtiles.Protocol();
-        maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
-      }
       const map = new maplibregl.Map({
         container: mapNode.current,
-        style: createCampusMapStyle(pmtilesUrl),
-        center: [school.longitude, school.latitude],
+        style: createCampusMapStyle(vectorTileUrl),
+        center: absoluteLngLat(school.latitude, school.longitude),
         zoom: 14.6,
         maxZoom: 18,
         attributionControl: false,
@@ -156,11 +154,23 @@ export function RentalExplorer() {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
       map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
       mapInstance.current = map;
-      setMapReady(true);
-      requestAnimationFrame(() => map.resize());
+      map.once('load', () => {
+        if (!active) return;
+        setMapError('');
+        setMapReady(true);
+        requestAnimationFrame(() => map.resize());
+      });
+      map.on('error', () => {
+        if (active && !map.isStyleLoaded()) setMapError('底圖載入失敗，請重新整理頁面');
+      });
+      resizeObserver = new ResizeObserver(() => map.resize());
+      resizeObserver.observe(mapNode.current);
+    }).catch(() => {
+      if (active) setMapError('地圖元件載入失敗，請重新整理頁面');
     });
     return () => {
       active = false;
+      resizeObserver?.disconnect();
       markers.current.forEach((marker) => marker.remove());
       mapInstance.current?.remove();
       mapInstance.current = null;
@@ -171,8 +181,20 @@ export function RentalExplorer() {
   useEffect(() => {
     const map = mapInstance.current;
     if (!mapReady || !map) return;
-    map.flyTo({ center: [school.longitude, school.latitude], zoom: 14.6, duration: 800, essential: true });
+    fittedCoordinates.current = '';
+    map.flyTo({ center: absoluteLngLat(school.latitude, school.longitude), zoom: 14.6, duration: 800, essential: true });
   }, [mapReady, school.latitude, school.longitude]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!mapReady || !map || loading) return;
+    const coordinateKey = `${school.id}:${filteredRentals.map((rental) => `${rental.id}:${rental.latitude}:${rental.longitude}`).join('|')}`;
+    if (fittedCoordinates.current === coordinateKey) return;
+    fittedCoordinates.current = coordinateKey;
+    const bounds = boundsForLocations(school, filteredRentals) as [[number, number], [number, number]];
+    if (bounds[0][0] === bounds[1][0] && bounds[0][1] === bounds[1][1]) return;
+    map.fitBounds(bounds, { padding: { top: 90, right: 90, bottom: 90, left: 90 }, maxZoom: 15.2, duration: 700 });
+  }, [filteredRentals, loading, mapReady, school]);
 
   useEffect(() => {
     const map = mapInstance.current;
@@ -188,7 +210,7 @@ export function RentalExplorer() {
       campusLabel.textContent = school.shortName;
       campusElement.appendChild(campusLabel);
       markers.current.push(new maplibregl.Marker({ element: campusElement, anchor: 'center' })
-        .setLngLat([school.longitude, school.latitude]).addTo(map));
+        .setLngLat(absoluteLngLat(school.latitude, school.longitude)).addTo(map));
 
       filteredRentals.forEach((rental) => {
         if (rental.latitude === null || rental.longitude === null) return;
@@ -210,7 +232,7 @@ export function RentalExplorer() {
           setMobilePanel(false);
         });
         markers.current.push(new maplibregl.Marker({ element, anchor: 'bottom' })
-          .setLngLat([rental.longitude, rental.latitude]).addTo(map));
+          .setLngLat(absoluteLngLat(rental.latitude, rental.longitude)).addTo(map));
       });
 
       if (addOpen) {
@@ -218,7 +240,7 @@ export function RentalExplorer() {
         element.className = `draft-marker${locationConfirmed ? ' is-confirmed' : ''}`;
         element.textContent = locationConfirmed ? '新地點' : '點地圖定位';
         markers.current.push(new maplibregl.Marker({ element, anchor: 'bottom' })
-          .setLngLat([draftLongitude, draftLatitude]).addTo(map));
+          .setLngLat(absoluteLngLat(draftLatitude, draftLongitude)).addTo(map));
       }
     });
     return () => { active = false; };
@@ -257,6 +279,7 @@ export function RentalExplorer() {
     const next = universities.find((item) => item.id === id) ?? universities[0];
     setSchoolId(next.id);
     setLoading(true);
+    setRentals([]);
     setSelectedId('');
     setDetailOpen(false);
     setDraftLatitude(next.latitude);
@@ -372,13 +395,15 @@ export function RentalExplorer() {
 
         <div className="map-panel">
           <div ref={mapNode} className="map-canvas" />
+          {!mapReady && !mapError && <div className="map-status" role="status"><span className="loading-dot" />載入校園地圖中…</div>}
+          {mapError && <div className="map-status is-error" role="alert"><MapPin size={17} />{mapError}</div>}
           <div className="map-school-card"><span className="map-school-icon"><MapPin size={17} /></span><span><strong>{school.name}</strong><small>{school.address}</small></span></div>
           {addOpen && <div className="map-pick-hint"><MapPin size={14} />點地圖選擇租屋地點位置</div>}
-          <button className="locate-button" aria-label="回到學校" onClick={() => mapInstance.current?.flyTo({ center: [school.longitude, school.latitude], zoom: 14.6 })}><LocateFixed size={16} /></button>
+          <button className="locate-button" aria-label="回到學校" onClick={() => mapInstance.current?.flyTo({ center: absoluteLngLat(school.latitude, school.longitude), zoom: 14.6 })}><LocateFixed size={16} /></button>
           <button className="show-results" onClick={() => setMobilePanel(true)}>查看 {filteredRentals.length} 個地點</button>
 
           {detailOpen && selected && <aside className="rental-detail-drawer">
-            <div className="drawer-head"><span><p>{sourceLabel(selected.source)}</p><h2>{selected.address}</h2><small>{selected.coordinatesVerified ? '地圖位置已確認' : selected.latitude === null ? '位置待確認' : '地圖位置為近似值，請以地址為準'}</small></span><button onClick={() => { setDetailOpen(false); setFormError(''); }} aria-label="關閉"><X size={15} /></button></div>
+            <div className="drawer-head"><span><p>{sourceLabel(selected.source)}</p><h2>{selected.address}</h2><small>{selected.coordinatesVerified ? '地圖位置已確認' : selected.latitude === null ? '位置待確認' : '固定近似座標，請以地址為準'}</small></span><button onClick={() => { setDetailOpen(false); setFormError(''); }} aria-label="關閉"><X size={15} /></button></div>
             <div className="rental-detail-content">
               <div className="metric-grid">
                 <article><CircleDollarSign size={17} /><small>所有來源平均租金</small><strong>{selected.averageRent === null ? '尚無資料' : `NT$${money.format(selected.averageRent)} / 月`}</strong></article>
