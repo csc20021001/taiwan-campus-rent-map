@@ -1,6 +1,6 @@
 # WZUNAA
 
-以地圖為核心的臺灣國立大學周邊租屋地點與匿名聚合回報平台。網站不是招租廣告平台：不保存房東電話、即時空房、押金、契約或房間照片；使用者登入後可新增「有人住過的地點」，並回報自己實際支付的月租與 1～5 分住過評分。
+以地圖為核心的臺灣國立大學周邊租屋地點與居住經驗交流平台。網站不保存房東電話、即時空房、押金、契約或房間照片；使用者登入後可新增租屋地點、回報月租與 1～5 分評分，並發表所有訪客都能閱讀的公開評論。
 
 ## MVP 功能
 
@@ -11,6 +11,7 @@
 - 政府歷史租賃參考與有效使用者回報不分來源，合併計算平均租金；評分亦取所有有效回報平均
 - Google OpenID Connect、PKCE、HttpOnly 工作階段
 - 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
+- 租屋地點評論可公開閱讀；使用 Google 登入後可發表 4～500 字評論
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
 - 老師搜尋及「老師態度、作業量、考試難易、給分標準」四項 1～5 分評分；不提供自由文字留言
 - AdSense 版位、隱私權政策、服務條款與 `ads.txt`
@@ -42,9 +43,10 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
 - `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
 - `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
+- `rental_comments`：租屋地點的公開評論，顯示作者帳號名稱但不公開 Email
 - `api_rate_limits`：以使用者、動作、時間窗計數的基本濫用防護
 
-舊版 `listings`／`reviews` 資料表與 API 仍保留以避免破壞既有資料，但新版 UI 不再使用房東聯絡方式或自由留言。所有舊版寫入也已要求登入與限流。
+舊版 `listings`／`reviews` 資料表與 API 仍保留以避免破壞既有資料；新版租屋地點評論使用獨立的 `rental_comments`。所有評論寫入都要求登入並套用限流。
 
 ### 租金統計
 
@@ -57,8 +59,10 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 | GET | `/api/universities` | D1 學校清單 |
 | GET | `/api/rentals?university_id=...&north=...&south=...&east=...&west=...` | 學校／地圖範圍內地點 |
 | GET | `/api/rentals/:id` | 地址、跨來源平均、價格資料筆數、評分與參考租金 |
+| GET | `/api/rentals/:id/comments` | 公開讀取最近 50 則租屋評論 |
 | POST | `/api/rentals` | 登入後新增或導向既有地點 |
 | POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
+| POST | `/api/rentals/:id/comments` | 登入後發表公開租屋評論 |
 | GET | `/api/professors` | `university_id`、`department`、`search` 篩選 |
 | GET | `/api/professors/:id` | 教授平均評分與人數 |
 | GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
@@ -103,6 +107,7 @@ npm run dev
 - `drizzle/0005_seed_government_rentals.sql`：本次 55 筆輸入去重後的 D1 初始地點
 - `drizzle/0006_fixed_absolute_coordinates.sql`：把共用街道中心點的房屋改為固定、未驗證的絕對座標
 - `drizzle/0008_academic_units_and_rating_dimensions.sql`：新增官方系所資料表與四項老師評分欄位
+- `drizzle/0009_rental_comments.sql`：新增公開租屋評論、內容長度限制與查詢 indexes
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 - `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域
@@ -150,8 +155,8 @@ npm run build
 npm audit
 ```
 
-Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 個不重複地點、56 筆學校關聯、唯一評分／回報限制，以及政府參考與有效使用者回報的跨來源平均計算。
+Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 個不重複地點、56 筆學校關聯、唯一評分／回報限制、公開評論限制，以及政府參考與有效使用者回報的跨來源平均計算。
 
 ## 地圖授權
 
-畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；選取狀態只改外框與陰影，不覆寫 MapLibre 用於經緯度定位的 `transform`。未確認的近似座標會明確標示。租屋資料不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。
+畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；所有 Marker 根節點維持 `position:absolute`，選取狀態只改外框與陰影，不覆寫 MapLibre 的定位 `transform`。租屋資料不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。
