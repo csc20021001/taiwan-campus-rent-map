@@ -12,6 +12,7 @@ const rentalCommentsMigration = readFileSync(new URL('../drizzle/0009_rental_com
 const professorLearningMigration = readFileSync(new URL('../drizzle/0010_professor_learning_score.sql', import.meta.url), 'utf8');
 const unifiedProfessorMigration = readFileSync(new URL('../drizzle/0011_unify_professor_identities.sql', import.meta.url), 'utf8');
 const currentRentalMigration = readFileSync(new URL('../drizzle/0012_nycu_campuses_and_current_rentals.sql', import.meta.url), 'utf8');
+const courseMigration = readFileSync(new URL('../drizzle/0013_courses_and_course_ratings.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -104,6 +105,30 @@ test('professors retain an official public source URL', () => {
     SELECT official_source_url FROM professors WHERE id = 'prof-source-1'
   `).get();
   assert.equal(professor.official_source_url, 'https://www.agec.ntu.edu.tw/zh_tw/teacher');
+});
+
+test('courses rate four course dimensions and keep official source links', () => {
+  const database = databaseWithCore();
+  apply(database, courseMigration);
+  database.exec(`
+    INSERT INTO users (id) VALUES ('course-user');
+    INSERT INTO courses
+      (id, university_id, term, course_code, name, department, official_source_url,
+       department_source_url, created_at, updated_at)
+    VALUES ('course-1', 'ntu', '115-1', 'CS1001', '程式設計', '資訊工程學系',
+      'https://nol.ntu.edu.tw/', 'https://www.csie.ntu.edu.tw/', 'now', 'now');
+    INSERT INTO course_instructors
+      (course_id, instructor_name, official_source_url, created_at)
+    VALUES ('course-1', '王小明', 'https://www.csie.ntu.edu.tw/', 'now');
+    INSERT INTO course_ratings
+      (id, course_id, user_id, learning_score, workload_score, exam_difficulty_score,
+       grading_standard_score, created_at, updated_at)
+    VALUES ('course-rating-1', 'course-1', 'course-user', 5, 4, 3, 2, 'now', 'now');
+  `);
+  assert.equal(database.prepare("SELECT learning_score FROM course_ratings WHERE id = 'course-rating-1'").get().learning_score, 5);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('course_ratings') WHERE name = 'attitude_score'").get().count, 0);
+  assert.throws(() => database.exec("UPDATE course_ratings SET workload_score = 0 WHERE id = 'course-rating-1'"), /CHECK/);
+  assert.equal(database.prepare("SELECT official_source_url FROM courses WHERE id = 'course-1'").get().official_source_url, 'https://nol.ntu.edu.tw/');
 });
 
 test('same university professor shares one identity and one rating across units', () => {

@@ -5,17 +5,17 @@
 ## MVP 功能
 
 - 11 所學校：臺大、清大、陽明交大、成大、中央、中興、中山、中正、臺科、北科、宜大；租屋地圖另把陽明交大拆成陽明校區與交大校區
-- 首頁先選擇「查房子」或「查教授」，閱讀並同意對應使用提醒後才會前往功能頁；租屋地圖位於 `/rentals`
+- 首頁先選擇「查房子」或「查課程」，閱讀並同意對應使用提醒後才會前往功能頁；租屋地圖位於 `/rentals`，課程評分位於 `/courses`
 - MapLibre GL JS + OpenStreetMap／OpenFreeMap 極簡向量底圖，不需要商業地圖 API 金鑰
 - Marker、地址、租金與評分全部由 Cloudflare D1 提供
 - 52 個政府歷史資料去重後地點、3 個教育部雲端租屋生活網目前待租地點、58 筆政府地點學校關聯，以及 1 個管理員建立的宜蘭地點
 - 政府歷史租賃參考與有效使用者回報不分來源，合併計算平均租金；評分亦取所有有效回報平均
 - Google OpenID Connect、PKCE、HttpOnly 工作階段
-- 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
+- 同帳號對同一租屋地點或課程只保留一筆評分，重新送出採 UPSERT
 - 租屋地點評論可公開閱讀；使用 Google 登入後可發表 4～500 字評論
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
-- 老師姓名遮罩顯示且前端不提供外部師資連結；同校同名老師跨系所／學程合併為一筆，系所名稱以「／」並列並共用評分
-- 可依「老師態度、學習收穫、作業量、考試難易、給分標準」五項給予 1～5 分評分
+- 課程以課名與課號為主體，旁列完整授課教師姓名；課程、教師與系所外部連結只使用學校官方公開網站
+- 可依「學習收穫、作業量、考試難易、給分標準」四項給予 1～5 分評分；給分分數越高代表越寬鬆
 - AdSense 版位、隱私權政策、服務條款與 `ads.txt`
 
 ## Cloudflare 架構
@@ -41,7 +41,9 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `users`：內部使用者、唯一 `google_sub`；Email 不公開
 - `auth_sessions`：工作階段 token 的 SHA-256 雜湊
 - `academic_departments`：11 校公開官方網站所列系所、研究所與學位單位
-- `professors`、`professor_ratings`：同校同名老師只有一個身分，跨系所名稱以「／」合併，並使用唯一 `(user_id, professor_id)` 五項評分
+- `professors`：保留官方師資身分與連結，用來關聯課程授課教師；同校同名老師跨系所名稱以「／」合併
+- `courses`、`course_instructors`：115-1 官方課程快照、授課教師與學校官方來源
+- `course_ratings`：唯一 `(user_id, course_id)` 的四項課程評分，不包含教師態度欄位
 - `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
 - `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
 - `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
@@ -65,10 +67,10 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 | POST | `/api/rentals` | 登入後新增或導向既有地點 |
 | POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
 | POST | `/api/rentals/:id/comments` | 登入後發表公開租屋評論 |
-| GET | `/api/professors` | `university_id`、`department`、`search` 篩選 |
-| GET | `/api/professors/:id` | 教授平均評分與人數 |
+| GET | `/api/courses` | 依 `university_id`、`department`、`search` 篩選課程、課號、教師或系所 |
+| GET | `/api/courses/:id` | 課程、完整授課教師、官方連結、四項平均與評分人數 |
 | GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
-| POST | `/api/professors/:id/rating` | 登入後 UPSERT 五項老師評分 |
+| POST | `/api/courses/:id/rating` | 登入後 UPSERT 四項課程評分 |
 
 ## 環境變數
 
@@ -113,11 +115,13 @@ npm run dev
 - `drizzle/0010_professor_learning_score.sql`：新增「學習收穫」評分欄位與 1～5 分限制
 - `drizzle/0011_unify_professor_identities.sql`：合併同校同名老師、保留每位使用者最新一筆評分並改為單一老師身分
 - `drizzle/0012_nycu_campuses_and_current_rentals.sql`：新增陽明校區與教育部雲端租屋生活網目前待租地點
+- `drizzle/0013_courses_and_course_ratings.sql`：新增課程、授課教師與不含教師態度的四項課程評分
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 - `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域
 - `db/nycu-official-units.generated.json`：由陽明交大官方「115 年網站健檢受檢單位清單」整理的系所網址
 - `db/department-seeds.ts`：收錄 11 校官方學術單位頁所列系所、研究所、學位學程與教學單位
+- `db/course-seeds.ts`：收錄 115-1 學校官方課程／教學大綱來源、完整授課教師與官方系所連結
 
 ```bash
 npm run seed:build

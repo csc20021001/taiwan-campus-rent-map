@@ -1,5 +1,5 @@
-import { ProfessorDirectory } from './professor-directory';
+import { redirect } from 'next/navigation';
 
 export default function ProfessorsPage() {
-  return <ProfessorDirectory />;
+  redirect('/courses');
 }

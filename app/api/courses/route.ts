@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensureDatabase } from '@/db';
-import { listProfessors } from '@/db/professors';
+import { listCourses } from '@/db/courses';
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: '學校代碼格式不正確。' }, { status: 400 });
   }
   await ensureDatabase();
-  return NextResponse.json({ professors: await listProfessors({ universityId, department, search }) }, {
+  return NextResponse.json({ courses: await listCourses({ universityId, department, search }) }, {
     headers: { 'Cache-Control': 'public, max-age=30, s-maxage=120' },
   });
 }

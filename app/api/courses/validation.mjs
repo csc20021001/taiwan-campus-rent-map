@@ -1,6 +1,5 @@
-export function validateProfessorRating(body) {
+export function validateCourseRating(body) {
   const fields = [
-    ['attitudeScore', 'attitude_score', '老師態度'],
     ['learningScore', 'learning_score', '學習收穫'],
     ['workloadScore', 'workload_score', '作業量'],
     ['examDifficultyScore', 'exam_difficulty_score', '考試難易'],

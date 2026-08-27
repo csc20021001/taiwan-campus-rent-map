@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
   await ensureDatabase();
   const rentals = await listRentalLocations({ universityId, north, south, east, west });
-  return NextResponse.json({ rentals }, { headers: { 'Cache-Control': 'public, max-age=30, s-maxage=120' } });
+  return NextResponse.json({ rentals }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: Request) {

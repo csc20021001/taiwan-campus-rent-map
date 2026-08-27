@@ -335,6 +335,7 @@ export function RentalExplorer() {
       setAddOpen(false);
       setDraftAddress('');
       setLocationConfirmed(false);
+      setRentals((current) => [data.rental!, ...current.filter((item) => item.id !== data.rental!.id)]);
       setSelectedId(data.rental.id);
       setComments([]);
       setCommentsLoading(true);
@@ -411,7 +412,7 @@ export function RentalExplorer() {
           {universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select><ChevronDown size={14} /></label>
         <nav className="top-actions">
-          <Link className="professor-nav-button" href="/professors"><Star size={15} fill="currentColor" />教授評分</Link>
+          <Link className="professor-nav-button" href="/courses"><Star size={15} fill="currentColor" />課程評分</Link>
           {!authLoading && (auth.user ? <button className="ghost-button" onClick={() => void logout()}><LogOut size={14} />登出</button> :
             <a className="ghost-button" href="/api/auth/google/start?returnTo=%2Frentals"><LogIn size={14} />Google 登入</a>)}
           <button className="publish-button" onClick={startAdd}><Plus size={15} />新增地點</button>

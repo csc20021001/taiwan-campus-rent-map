@@ -25,6 +25,7 @@ test('current listings use only the Ministry of Education public rental platform
   }
 });
 
-test('newly created rental locations are sorted first', () => {
-  assert.match(rentalDbSource, /ORDER BY l\.created_at DESC/);
+test('user and admin published rentals stay above government reference records', () => {
+  assert.match(rentalDbSource, /ORDER BY CASE l\.source WHEN 'user' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END/);
+  assert.match(rentalDbSource, /l\.created_at DESC/);
 });

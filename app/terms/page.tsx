@@ -46,7 +46,7 @@ export default function TermsPage() {
 
         <nav className="legal-nav" aria-label="網站政策">
           <Link href="/rentals">租屋地圖</Link>
-          <Link href="/professors">教授評分</Link>
+          <Link href="/courses">課程評分</Link>
           <Link href="/privacy">隱私權政策</Link>
         </nav>
       </article>

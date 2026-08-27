@@ -117,6 +117,52 @@ export const professorRatings = sqliteTable('professor_ratings', {
   uniqueIndex('idx_professor_ratings_user_professor').on(table.userId, table.professorId),
 ]);
 
+export const courses = sqliteTable('courses', {
+  id: text('id').primaryKey(),
+  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  term: text('term').notNull(),
+  courseCode: text('course_code').notNull(),
+  name: text('name').notNull(),
+  department: text('department').notNull(),
+  officialSourceUrl: text('official_source_url').notNull(),
+  departmentSourceUrl: text('department_source_url').notNull().default(''),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_courses_university_term').on(table.universityId, table.term, table.department, table.name),
+  index('idx_courses_name').on(table.name),
+  index('idx_courses_department').on(table.department),
+  uniqueIndex('idx_courses_identity').on(table.universityId, table.term, table.courseCode),
+]);
+
+export const courseInstructors = sqliteTable('course_instructors', {
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  instructorName: text('instructor_name').notNull(),
+  professorId: text('professor_id').references(() => professors.id, { onDelete: 'set null' }),
+  officialSourceUrl: text('official_source_url').notNull().default(''),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.courseId, table.instructorName] }),
+  index('idx_course_instructors_name').on(table.instructorName),
+  index('idx_course_instructors_professor').on(table.professorId),
+]);
+
+export const courseRatings = sqliteTable('course_ratings', {
+  id: text('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  learningScore: integer('learning_score').notNull(),
+  workloadScore: integer('workload_score').notNull(),
+  examDifficultyScore: integer('exam_difficulty_score').notNull(),
+  gradingStandardScore: integer('grading_standard_score').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_course_ratings_course').on(table.courseId),
+  index('idx_course_ratings_user').on(table.userId),
+  uniqueIndex('idx_course_ratings_user_course').on(table.userId, table.courseId),
+]);
+
 export const rentalLocations = sqliteTable('rental_locations', {
   id: text('id').primaryKey(),
   universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'restrict' }),

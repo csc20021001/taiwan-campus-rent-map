@@ -7,6 +7,7 @@ import { fixedAbsoluteCoordinate } from './rental-coordinate-overrides.mjs';
 import { professorSeeds } from './professors-seeds.generated';
 import { departmentSeeds } from './department-seeds';
 import { currentGovernmentRentalSeeds } from './current-government-rental-seeds';
+import { courseSeeds } from './course-seeds';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -167,6 +168,39 @@ async function initializeCoreTables() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS courses (
+      id TEXT PRIMARY KEY NOT NULL,
+      university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
+      term TEXT NOT NULL,
+      course_code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      department TEXT NOT NULL,
+      official_source_url TEXT NOT NULL,
+      department_source_url TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (university_id, term, course_code)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS course_instructors (
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      instructor_name TEXT NOT NULL,
+      professor_id TEXT REFERENCES professors(id) ON DELETE SET NULL,
+      official_source_url TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (course_id, instructor_name)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS course_ratings (
+      id TEXT PRIMARY KEY NOT NULL,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      learning_score INTEGER NOT NULL CHECK (learning_score BETWEEN 1 AND 5),
+      workload_score INTEGER NOT NULL CHECK (workload_score BETWEEN 1 AND 5),
+      exam_difficulty_score INTEGER NOT NULL CHECK (exam_difficulty_score BETWEEN 1 AND 5),
+      grading_standard_score INTEGER NOT NULL CHECK (grading_standard_score BETWEEN 1 AND 5),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (user_id, course_id)
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS rental_locations (
       id TEXT PRIMARY KEY NOT NULL,
       university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE RESTRICT,
@@ -232,6 +266,15 @@ async function initializeCoreTables() {
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_professor_ratings_user_professor ON professor_ratings(user_id, professor_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professor_ratings_professor ON professor_ratings(professor_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professor_ratings_user ON professor_ratings(user_id)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_identity ON courses(university_id, term, course_code)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_university_term ON courses(university_id, term, department, name)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_name ON courses(name)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_department ON courses(department)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_course_instructors_name ON course_instructors(instructor_name)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_course_instructors_professor ON course_instructors(professor_id)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_course_ratings_user_course ON course_ratings(user_id, course_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_course_ratings_course ON course_ratings(course_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_course_ratings_user ON course_ratings(user_id)'),
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_rental_locations_normalized_address ON rental_locations(normalized_address)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_locations_university ON rental_locations(university_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_locations_coordinates ON rental_locations(latitude, longitude)'),
@@ -278,6 +321,41 @@ async function seedProfessors() {
       updated_at = excluded.updated_at
   `).bind(seed.id, seed.universityId, seed.department, seed.name, seed.sourceUrl, timestamp, timestamp));
   await runBatches(statements);
+}
+
+async function seedCourses() {
+  const db = getD1();
+  const timestamp = '2026-08-27T00:00:00.000Z';
+  const courseStatements = courseSeeds.map((seed) => db.prepare(`
+    INSERT INTO courses (
+      id, university_id, term, course_code, name, department,
+      official_source_url, department_source_url, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(university_id, term, course_code) DO UPDATE SET
+      name = excluded.name,
+      department = excluded.department,
+      official_source_url = excluded.official_source_url,
+      department_source_url = excluded.department_source_url,
+      updated_at = excluded.updated_at
+  `).bind(
+    seed.id, seed.universityId, seed.term, seed.courseCode, seed.name, seed.department,
+    seed.officialSourceUrl, seed.departmentSourceUrl, timestamp, timestamp,
+  ));
+  await runBatches(courseStatements);
+
+  const professorByIdentity = new Map(professorSeeds.map((seed) => [`${seed.universityId}\u0000${seed.name}`, seed]));
+  const instructorStatements = courseSeeds.flatMap((seed) => seed.instructors.map((instructor) => {
+    const professor = professorByIdentity.get(`${seed.universityId}\u0000${instructor.name}`);
+    return db.prepare(`
+      INSERT INTO course_instructors (
+        course_id, instructor_name, professor_id, official_source_url, created_at
+      ) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(course_id, instructor_name) DO UPDATE SET
+        professor_id = excluded.professor_id,
+        official_source_url = excluded.official_source_url
+    `).bind(seed.id, instructor.name, professor?.id ?? null, instructor.officialSourceUrl ?? professor?.sourceUrl ?? '', timestamp);
+  }));
+  await runBatches(instructorStatements);
 }
 
 async function seedRentalLocations() {
@@ -459,6 +537,7 @@ async function initializeDatabase() {
   await initializeCoreTables();
   await seedDepartments();
   await seedProfessors();
+  await seedCourses();
   await seedRentalLocations();
   await db.prepare('PRAGMA optimize').run();
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ArrowRight, GraduationCap, House, MapPin, ShieldAlert, Star, X } from 'lucide-react';
 
-type EntryKind = 'rentals' | 'professors';
+type EntryKind = 'rentals' | 'courses';
 
 const disclaimers: Record<EntryKind, { title: string; description: string; points: string[] }> = {
   rentals: {
@@ -17,12 +17,12 @@ const disclaimers: Record<EntryKind, { title: string; description: string; point
       '公開評論代表個別使用者經驗，請自行判斷並保護個人資料。',
     ],
   },
-  professors: {
-    title: '教授評分使用提醒',
+  courses: {
+    title: '課程評分使用提醒',
     description: '評分是使用者的個人修課經驗，只供選課參考，不代表客觀事實或校方立場。',
     points: [
-      '請以尊重、具體且與教學相關的方式評分，不得騷擾、侮辱或誹謗。',
-      '同一位老師的評價可能因課程、學期與修課者而不同。',
+      '請針對實際修過的課程，依學習收穫、作業量、考試難易與給分標準評分。',
+      '同一門課的體驗可能因學期、授課教師與修課者而不同。',
       '選課決定與學習結果由使用者自行評估與負責。',
     ],
   },
@@ -58,17 +58,17 @@ export default function Home() {
       <section className="entry-hero">
         <p className="entry-kicker">從這裡開始</p>
         <h1>今天想查什麼？</h1>
-        <p className="entry-intro">選擇租屋地圖，或查看各校教授評分。</p>
+        <p className="entry-intro">選擇租屋地圖，或查看各校課程評分。</p>
         <div className="entry-choices">
           <button className="entry-choice is-rental" type="button" onClick={() => openDisclaimer('rentals')}>
             <span className="entry-choice-icon"><House size={30} /></span>
             <span className="entry-choice-copy"><small>校園周邊</small><strong>查房子</strong><span>看租金、位置、住戶評分與公開評論</span></span>
             <ArrowRight className="entry-arrow" size={22} />
           </button>
-          <button className="entry-choice is-professor" type="button" onClick={() => openDisclaimer('professors')}>
+          <button className="entry-choice is-professor" type="button" onClick={() => openDisclaimer('courses')}>
             <span className="entry-choice-icon"><GraduationCap size={31} /></span>
-            <span className="entry-choice-copy"><small>課程選擇</small><strong>查教授</strong><span>看教學、學習收穫、作業、考試與給分評價</span></span>
-            <span className="entry-rating-cue"><Star size={13} fill="currentColor" />五項評分</span>
+            <span className="entry-choice-copy"><small>課程選擇</small><strong>查課程</strong><span>看授課教師、學習收穫、作業、考試與給分評價</span></span>
+            <span className="entry-rating-cue"><Star size={13} fill="currentColor" />四項評分</span>
             <ArrowRight className="entry-arrow" size={22} />
           </button>
         </div>

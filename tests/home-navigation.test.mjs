@@ -5,12 +5,13 @@ import test from 'node:test';
 const home = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
 const rentalsPage = readFileSync(new URL('../app/rentals/page.tsx', import.meta.url), 'utf8');
 
-test('homepage asks users to choose rentals or professors', () => {
+test('homepage asks users to choose rentals or courses', () => {
   assert.match(home, /今天想查什麼/);
   assert.match(home, /openDisclaimer\('rentals'\)/);
   assert.match(home, /查房子/);
-  assert.match(home, /openDisclaimer\('professors'\)/);
-  assert.match(home, /查教授/);
+  assert.match(home, /openDisclaimer\('courses'\)/);
+  assert.match(home, /查課程/);
+  assert.match(home, /四項評分/);
   assert.match(home, /role="dialog"/);
   assert.match(home, /我已閱讀並同意以上提醒/);
   assert.match(home, /disabled=\{!agreed\}/);
