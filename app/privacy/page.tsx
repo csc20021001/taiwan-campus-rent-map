@@ -26,17 +26,17 @@ export default function PrivacyPage() {
 
         <section>
           <h2>使用目的與公開範圍</h2>
-          <p>我們使用帳號資料來驗證身分、防止同一帳號重複灌票，以及維護服務安全。公開頁面只顯示租屋地點與匿名聚合後的租金、評分及人數；不顯示 Email、Google ID、內部 user ID、個別使用者回報內容或 OAuth token。</p>
+          <p>我們使用帳號資料確認身分並維護服務安全。公開評論會顯示你的帳號名稱與評論內容；Email 與帳號識別資訊不會公開。</p>
         </section>
 
         <section>
           <h2>登入與安全</h2>
-          <p>Google 登入採用 OpenID Connect。本站不保存 Google 密碼、access token 或 refresh token；登入工作階段以 HttpOnly Cookie 和資料庫中的雜湊值維護。租屋地點不提供房東姓名、電話、私人地址留言或自由文字欄位。</p>
+          <p>Google 登入由 Google 驗證，本站不會取得或保存你的 Google 密碼。租屋頁面不公開房東姓名、電話或其他私人聯絡資料。</p>
         </section>
 
         <section>
           <h2>服務供應商</h2>
-          <p>本站可能透過 Google 提供登入與廣告服務，透過 Cloudflare／OpenAI Sites 提供網站與資料儲存，並使用 OpenStreetMap、Protomaps 與 MapLibre 顯示地圖。各供應商會依其隱私政策處理必要資料；若日後啟用 AdSense，Google 可能使用 Cookie 提供與衡量廣告。</p>
+          <p>本站使用 Google 提供登入與廣告服務，並由網站與地圖服務供應商處理提供功能所需的資料。各供應商會依其隱私政策處理相關資料。</p>
         </section>
 
         <section>

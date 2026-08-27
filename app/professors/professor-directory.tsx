@@ -133,7 +133,7 @@ export function ProfessorDirectory() {
       if (!response.ok || !data.professor) throw new Error(data.error || '評分失敗');
       setProfessors((current) => current.map((item) => item.id === data.professor!.id ? data.professor! : item));
       setRatingTargetId('');
-      setError('四項評分已更新；同一帳號對同一位老師只保留一筆。');
+      setError('評分已更新。');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '評分失敗');
     } finally {
@@ -143,17 +143,17 @@ export function ProfessorDirectory() {
 
   return <main className="professor-page">
     <header className="professor-topbar"><Link href="/"><ArrowLeft size={15} />回租屋地圖</Link><span className="professor-brand"><GraduationCap size={18} />WZUNAA</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fprofessors"><LogIn size={14} />Google 登入</a>}</header>
-    <section className="professor-hero"><p><ShieldCheck size={14} />匿名聚合、無自由文字留言</p><h1>{school.shortName}老師評分</h1><span>分別評價老師態度、作業量、考試難易與給分標準；重新提交會更新自己的那一筆。</span></section>
-    <p className="professor-source-note"><ShieldCheck size={14} />已收錄 {departmentsLoading ? '…' : departments.length} 個官方系所與學位單位；老師姓名只取自公開校網。{sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查看官方來源<ExternalLink size={11} /></a>}</p>
+    <section className="professor-hero"><p><Star size={14} fill="currentColor" />教授評分專區</p><h1>{school.shortName}教授評分</h1><span>看看學生對教學、作業、考試與給分的評價</span></section>
+    <p className="professor-source-note"><ShieldCheck size={14} />已收錄 {departmentsLoading ? '…' : departments.length} 個系所與學位單位。{sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查看學校網站<ExternalLink size={11} /></a>}</p>
     <section className="professor-controls">
       <label>學校<select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label><Search size={14} />搜尋老師或系所<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="輸入姓名或系所" /></label>
       <label>系所<select value={department} onChange={(event) => setDepartment(event.target.value)}><option value="">全部系所（{departments.length}）</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
     </section>
-    {error && <p className={`professor-message ${error.startsWith('四項') ? 'is-success' : ''}`}>{error}</p>}
+    {error && <p className={`professor-message ${error === '評分已更新。' ? 'is-success' : ''}`}>{error}</p>}
     <section className="professor-grid">
       {loading && <div className="professor-empty"><span className="loading-dot" />載入中</div>}
-      {!loading && professors.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}尚無已核對老師` : '目前尚無已核對老師'}</strong><span>這個官方系所已建檔；老師姓名必須能在校方公開頁面核對後才會顯示，不會使用論壇或第三方名錄補齊。</span></div>}
+      {!loading && professors.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}目前沒有老師資料` : '目前沒有老師資料'}</strong><span>請試著切換系所或搜尋其他姓名。</span></div>}
       {professors.map((professor) => <article className={`professor-card ${ratingTargetId === professor.id ? 'is-rating' : ''}`} key={professor.id}>
         <small>{professor.department}</small><h2>{professor.name}</h2>
         <a className="professor-official-link" href={professor.officialSourceUrl} target="_blank" rel="noreferrer">查看官方師資頁<ExternalLink size={12} /></a>

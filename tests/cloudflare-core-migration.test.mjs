@@ -8,6 +8,7 @@ const seedMigration = readFileSync(new URL('../drizzle/0005_seed_government_rent
 const coordinateMigration = readFileSync(new URL('../drizzle/0006_fixed_absolute_coordinates.sql', import.meta.url), 'utf8');
 const professorSourceMigration = readFileSync(new URL('../drizzle/0007_official_professor_sources.sql', import.meta.url), 'utf8');
 const academicUnitsMigration = readFileSync(new URL('../drizzle/0008_academic_units_and_rating_dimensions.sql', import.meta.url), 'utf8');
+const rentalCommentsMigration = readFileSync(new URL('../drizzle/0009_rental_comments.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -27,8 +28,27 @@ function databaseWithCore() {
   apply(database, coreMigration);
   apply(database, professorSourceMigration);
   apply(database, academicUnitsMigration);
+  apply(database, rentalCommentsMigration);
   return database;
 }
+
+test('rental comments are public records linked to a location and user', () => {
+  const database = databaseWithCore();
+  apply(database, seedMigration);
+  database.exec(`
+    INSERT INTO users (id) VALUES ('comment-user');
+    INSERT INTO rental_comments
+      (id, rental_location_id, user_id, content, created_at, updated_at)
+    SELECT 'comment-1', id, 'comment-user', '採光很好，晚上也安靜。', '2026-08-27T01:00:00.000Z', '2026-08-27T01:00:00.000Z'
+    FROM rental_locations WHERE normalized_address = '臺北市大安區和平東路二段96巷51號';
+  `);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_comments').get().count, 1);
+  assert.throws(() => database.exec(`INSERT INTO rental_comments
+    (id, rental_location_id, user_id, content, created_at, updated_at)
+    SELECT 'comment-2', id, 'comment-user', '太短', 'now', 'now'
+    FROM rental_locations LIMIT 1`), /CHECK/);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM pragma_index_list('rental_comments') WHERE name = 'idx_rental_comments_location_created'").get().count, 1);
+});
 
 test('academic units and four professor rating dimensions migrate with constraints', () => {
   const database = databaseWithCore();

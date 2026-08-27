@@ -29,7 +29,6 @@ export function AdSenseSlot() {
     return (
       <aside className="ad-slot ad-placeholder" aria-label="廣告版位">
         <span>廣告</span>
-        <strong>AdSense 核准後自動啟用</strong>
       </aside>
     );
   }

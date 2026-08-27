@@ -162,6 +162,18 @@ export const rentalReports = sqliteTable('rental_reports', {
   uniqueIndex('idx_rental_reports_user_location').on(table.userId, table.rentalLocationId),
 ]);
 
+export const rentalComments = sqliteTable('rental_comments', {
+  id: text('id').primaryKey(),
+  rentalLocationId: text('rental_location_id').notNull().references(() => rentalLocations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_rental_comments_location_created').on(table.rentalLocationId, table.createdAt),
+  index('idx_rental_comments_user_created').on(table.userId, table.createdAt),
+]);
+
 export const apiRateLimits = sqliteTable('api_rate_limits', {
   userId: text('user_id').notNull(),
   action: text('action').notNull(),

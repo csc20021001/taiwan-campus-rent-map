@@ -144,6 +144,14 @@ async function initializeCoreTables() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS rental_comments (
+      id TEXT PRIMARY KEY NOT NULL,
+      rental_location_id TEXT NOT NULL REFERENCES rental_locations(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL CHECK (length(trim(content)) BETWEEN 4 AND 500),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS api_rate_limits (
       user_id TEXT NOT NULL,
       action TEXT NOT NULL,
@@ -174,6 +182,8 @@ async function initializeCoreTables() {
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_location ON rental_reports(rental_location_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_user ON rental_reports(user_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_aggregate ON rental_reports(rental_location_id, is_valid, is_outlier)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_comments_location_created ON rental_comments(rental_location_id, created_at DESC)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_comments_user_created ON rental_comments(user_id, created_at DESC)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_api_rate_limits_cleanup ON api_rate_limits(window_started_at)'),
   ]);
 }
@@ -363,6 +373,7 @@ async function initializeDatabase() {
   await seedDepartments();
   await seedProfessors();
   await seedRentalLocations();
+  await db.prepare('PRAGMA optimize').run();
 }
 
 export function ensureDatabase() {

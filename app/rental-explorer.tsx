@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { BarChart3, ChevronDown, CircleDollarSign, LocateFixed, LogIn, LogOut, MapPin, Plus, ShieldCheck, Star, X } from 'lucide-react';
+import { BarChart3, ChevronDown, CircleDollarSign, LocateFixed, LogIn, LogOut, MapPin, MessageSquare, Plus, ShieldCheck, Star, X } from 'lucide-react';
 import type { Map as MapLibreMap, MapMouseEvent, Marker as MapLibreMarker } from 'maplibre-gl';
 import { AdSenseSlot } from './adsense';
 import { createCampusMapStyle, DEFAULT_VECTOR_TILE_URL } from './campus-map-style.mjs';
@@ -29,16 +29,12 @@ type Rental = {
   averageRating: number | null;
   ratingCount: number;
 };
-type Filter = 'all' | 'reported' | 'under10' | 'government';
+type RentalComment = { id: string; authorName: string; content: string; createdAt: string };
+type Filter = 'all' | 'rated' | 'under10';
 
 const money = new Intl.NumberFormat('zh-TW');
+const date = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'short', day: 'numeric' });
 const vectorTileUrl = process.env.NEXT_PUBLIC_VECTOR_TILE_URL?.trim() || DEFAULT_VECTOR_TILE_URL;
-
-function sourceLabel(source: Rental['source']) {
-  if (source === 'government') return '地點資料來源：政府開放資料';
-  if (source === 'admin') return '地點由網站管理員建立';
-  return '地點由使用者新增';
-}
 
 function rentLabel(rental: Rental) {
   if (rental.averageRent !== null) return `$${Math.round(rental.averageRent / 100) / 10}k`;
@@ -73,6 +69,11 @@ export function RentalExplorer() {
   const [locationConfirmed, setLocationConfirmed] = useState(false);
   const [monthlyRent, setMonthlyRent] = useState('');
   const [overallRating, setOverallRating] = useState(5);
+  const [comments, setComments] = useState<RentalComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentBody, setCommentBody] = useState('');
+  const [commentError, setCommentError] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState('');
@@ -80,9 +81,8 @@ export function RentalExplorer() {
   const school = universities.find((item) => item.id === schoolId) ?? universities[0];
   const selected = rentals.find((item) => item.id === selectedId) ?? null;
   const filteredRentals = useMemo(() => rentals.filter((rental) => {
-    if (filter === 'reported') return rental.rentReportCount > 0;
+    if (filter === 'rated') return rental.ratingCount > 0;
     if (filter === 'under10') return rental.averageRent !== null && rental.averageRent < 10000;
-    if (filter === 'government') return rental.source === 'government';
     return true;
   }), [filter, rentals]);
 
@@ -114,6 +114,20 @@ export function RentalExplorer() {
         }
       })
       .catch(() => undefined);
+    return () => { active = false; };
+  }, [detailOpen, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || !detailOpen) return;
+    let active = true;
+    fetch(`/api/rentals/${encodeURIComponent(selectedId)}/comments`, { cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json() as { comments?: RentalComment[]; error?: string };
+        if (!response.ok) throw new Error(data.error || '評論載入失敗');
+        if (active) setComments(data.comments ?? []);
+      })
+      .catch((error) => { if (active) setCommentError(error instanceof Error ? error.message : '評論載入失敗'); })
+      .finally(() => { if (active) setCommentsLoading(false); });
     return () => { active = false; };
   }, [detailOpen, selectedId]);
 
@@ -234,6 +248,9 @@ export function RentalExplorer() {
         element.append(price, rating);
         element.addEventListener('click', () => {
           setSelectedId(rental.id);
+          setComments([]);
+          setCommentsLoading(true);
+          setCommentError('');
           setDetailOpen(true);
           setMobilePanel(false);
         });
@@ -319,6 +336,9 @@ export function RentalExplorer() {
       setDraftAddress('');
       setLocationConfirmed(false);
       setSelectedId(data.rental.id);
+      setComments([]);
+      setCommentsLoading(true);
+      setCommentError('');
       setLoading(true);
       setReloadVersion((current) => current + 1);
       setDetailOpen(true);
@@ -352,6 +372,31 @@ export function RentalExplorer() {
     } finally { setSubmitting(false); }
   }
 
+  async function submitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    if (!auth.user) {
+      window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/')}`);
+      return;
+    }
+    setCommentSubmitting(true);
+    setCommentError('');
+    try {
+      const response = await fetch(`/api/rentals/${encodeURIComponent(selected.id)}/comments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: commentBody }),
+      });
+      const data = await response.json() as { comment?: RentalComment; error?: string };
+      if (!response.ok || !data.comment) throw new Error(data.error || '評論送出失敗');
+      setComments((current) => [data.comment!, ...current]);
+      setCommentBody('');
+      setToast('評論已公開');
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : '評論送出失敗');
+    } finally {
+      setCommentSubmitting(false);
+    }
+  }
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     setAuth((current) => ({ ...current, user: null }));
@@ -366,7 +411,7 @@ export function RentalExplorer() {
           {universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select><ChevronDown size={14} /></label>
         <nav className="top-actions">
-          <Link className="ghost-button" href="/professors">教授評分</Link>
+          <Link className="professor-nav-button" href="/professors"><Star size={15} fill="currentColor" />教授評分</Link>
           {!authLoading && (auth.user ? <button className="ghost-button" onClick={() => void logout()}><LogOut size={14} />登出</button> :
             <a className="ghost-button" href="/api/auth/google/start?returnTo=%2F"><LogIn size={14} />Google 登入</a>)}
           <button className="publish-button" onClick={startAdd}><Plus size={15} />新增地點</button>
@@ -376,31 +421,30 @@ export function RentalExplorer() {
       <section className="workspace">
         <aside className={`listing-panel${mobilePanel ? ' is-open' : ''}`}>
           <button className="mobile-sheet-close" onClick={() => setMobilePanel(false)} aria-label="關閉列表"><X size={16} /></button>
-          <div className="panel-heading"><div className="heading-row"><span><h1>{school.shortName}周邊租屋地點</h1><p>{loading ? '讀取中…' : `${rentals.length} 個不重複地點`}</p></span></div></div>
+          <div className="panel-heading"><div className="heading-row"><span><h1>{school.shortName}周邊租屋</h1><p>{loading ? '載入中…' : `${rentals.length} 個租屋位置`}</p></span></div></div>
           <div className="quick-filters">
-            {([['all', '全部'], ['reported', '已有回報'], ['under10', '平均萬元內'], ['government', '政府地點']] as const).map(([id, label]) =>
+            {([['all', '全部'], ['rated', '有評分'], ['under10', '月租萬元內']] as const).map(([id, label]) =>
               <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>)}
           </div>
-          <p className="trust-note"><ShieldCheck size={15} />價格不分來源，以所有有效資料取平均；評分亦同。</p>
+          <p className="trust-note"><ShieldCheck size={15} />查看附近租金與住戶評分</p>
           <AdSenseSlot slot={process.env.NEXT_PUBLIC_ADSENSE_MAP_SLOT ?? ''} />
           <div className="cards">
-            {loading && <div className="empty-state"><span className="loading-dot" /><strong>載入 D1 地點資料</strong></div>}
+            {loading && <div className="empty-state"><span className="loading-dot" /><strong>載入中…</strong></div>}
             {!loading && filteredRentals.length === 0 && <div className="empty-state"><MapPin size={24} /><strong>此篩選尚無地點</strong><span>可登入後從地圖新增。</span></div>}
-            {filteredRentals.map((rental) => <button type="button" key={rental.id} className={`rental-location-card${rental.id === selectedId ? ' is-selected' : ''}`} onClick={() => { setSelectedId(rental.id); setDetailOpen(true); setMobilePanel(false); }}>
-              <span className="rental-source">{rental.source === 'government' ? '政府地點' : rental.source === 'admin' ? '管理員建立' : '使用者新增'}</span>
+            {filteredRentals.map((rental) => <button type="button" key={rental.id} className={`rental-location-card${rental.id === selectedId ? ' is-selected' : ''}`} onClick={() => { setSelectedId(rental.id); setComments([]); setCommentsLoading(true); setCommentError(''); setDetailOpen(true); setMobilePanel(false); }}>
               <strong>{rental.address}</strong>
               <span className="rental-card-stats">
-                <span><small>所有來源平均租金</small><b>{rental.averageRent === null ? '尚無資料' : `NT$${money.format(rental.averageRent)}`}</b></span>
-                <span><small>所有評分平均</small><b>{rental.averageRating === null ? '—' : `★ ${rental.averageRating.toFixed(1)}`}</b></span>
+                <span><small>平均月租</small><b>{rental.averageRent === null ? '尚無資料' : `NT$${money.format(rental.averageRent)}`}</b></span>
+                <span><small>住戶評分</small><b>{rental.averageRating === null ? '—' : `★ ${rental.averageRating.toFixed(1)}`}</b></span>
               </span>
-              {rental.latitude === null && <span className="coordinate-warning">位置待確認，暫不顯示 Marker</span>}
+              {rental.latitude === null && <span className="coordinate-warning">尚未標記位置</span>}
             </button>)}
           </div>
         </aside>
 
         <div className="map-panel">
           <div ref={mapNode} className="map-canvas" />
-          {!mapReady && !mapError && <div className="map-status" role="status"><span className="loading-dot" />載入校園地圖中…</div>}
+          {!mapReady && !mapError && <div className="map-status" role="status"><span className="loading-dot" />載入中…</div>}
           {mapError && <div className="map-status is-error" role="alert"><MapPin size={17} />{mapError}</div>}
           <div className="map-school-card"><span className="map-school-icon"><MapPin size={17} /></span><span><strong>{school.name}</strong><small>{school.address}</small></span></div>
           {addOpen && <div className="map-pick-hint"><MapPin size={14} />點地圖選擇租屋地點位置</div>}
@@ -408,30 +452,46 @@ export function RentalExplorer() {
           <button className="show-results" onClick={() => setMobilePanel(true)}>查看 {filteredRentals.length} 個地點</button>
 
           {detailOpen && selected && <aside className="rental-detail-drawer">
-            <div className="drawer-head"><span><p>{sourceLabel(selected.source)}</p><h2>{selected.address}</h2><small>{selected.coordinatesVerified ? '地圖位置已確認' : selected.latitude === null ? '位置待確認' : '固定近似座標，請以地址為準'}</small></span><button onClick={() => { setDetailOpen(false); setFormError(''); }} aria-label="關閉"><X size={15} /></button></div>
+            <div className="drawer-head"><span><p>租屋資訊</p><h2>{selected.address}</h2></span><button onClick={() => { setDetailOpen(false); setFormError(''); setCommentError(''); }} aria-label="關閉"><X size={15} /></button></div>
             <div className="rental-detail-content">
               <div className="metric-grid">
-                <article><CircleDollarSign size={17} /><small>所有來源平均租金</small><strong>{selected.averageRent === null ? '尚無資料' : `NT$${money.format(selected.averageRent)} / 月`}</strong></article>
-                <article><BarChart3 size={17} /><small>價格資料筆數</small><strong>{selected.priceSourceCount} 筆</strong></article>
-                <article><Star size={17} /><small>所有評分平均</small><strong>{selected.averageRating === null ? '尚無評分' : `${selected.averageRating.toFixed(1)} / 5`}</strong></article>
-                <article><ShieldCheck size={17} /><small>使用者有效回報</small><strong>{selected.rentReportCount} 人</strong></article>
+                <article><CircleDollarSign size={17} /><small>平均月租</small><strong>{selected.averageRent === null ? '尚無資料' : `NT$${money.format(selected.averageRent)} / 月`}</strong></article>
+                <article><BarChart3 size={17} /><small>租金回報</small><strong>{selected.priceSourceCount} 筆</strong></article>
+                <article><Star size={17} /><small>住戶評分</small><strong>{selected.averageRating === null ? '尚無評分' : `${selected.averageRating.toFixed(1)} / 5`}</strong></article>
+                <article><ShieldCheck size={17} /><small>評分人數</small><strong>{selected.ratingCount} 人</strong></article>
               </div>
+              <section className="rental-comments" aria-label="公開評論">
+                <div className="rental-comments-heading"><span><MessageSquare size={16} /><strong>公開評論</strong></span><small>{comments.length} 則</small></div>
+                {commentsLoading && <p className="comment-status">載入中…</p>}
+                {!commentsLoading && comments.length === 0 && <p className="comment-status">還沒有人評論，來分享第一則吧。</p>}
+                {!commentsLoading && <div className="rental-comment-list">
+                  {comments.map((comment) => <article className="rental-comment" key={comment.id}>
+                    <header><span className="avatar">{comment.authorName.slice(0, 1)}</span><span><strong>{comment.authorName}</strong><small>{date.format(new Date(comment.createdAt))}</small></span></header>
+                    <p>{comment.content}</p>
+                  </article>)}
+                </div>}
+                <form className="rental-comment-form" onSubmit={submitComment}>
+                  <textarea required minLength={4} maxLength={500} rows={3} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="分享實際居住感受" />
+                  {commentError && <p className="form-error">{commentError}</p>}
+                  <button disabled={commentSubmitting}>{auth.user ? (commentSubmitting ? '送出中…' : '公開評論') : '使用 Google 登入後評論'}</button>
+                </form>
+              </section>
               <form className="rental-report-form" onSubmit={submitReport}>
-                <h3>回報你實際住過的價格</h3><p>同一 Google 帳號只保留一筆，重新送出會更新。</p>
-                <label>每月實付租金<input type="number" min="1000" max="200000" step="1" required value={monthlyRent} onChange={(event) => setMonthlyRent(event.target.value)} placeholder="例如 8500" /></label>
+                <h3>分享租金與評分</h3>
+                <label>每月租金<input type="number" min="1000" max="200000" step="1" required value={monthlyRent} onChange={(event) => setMonthlyRent(event.target.value)} placeholder="例如 8500" /></label>
                 <fieldset><legend>整體評分</legend><div className="score-picker">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={overallRating === score ? 'active' : ''} onClick={() => setOverallRating(score)}>{score}</button>)}</div></fieldset>
                 {formError && <p className="form-error">{formError}</p>}
-                <button className="submit-review" disabled={submitting}>{auth.user ? (submitting ? '儲存中…' : '儲存我的回報') : '使用 Google 登入後回報'}</button>
+                <button className="submit-review" disabled={submitting}>{auth.user ? (submitting ? '儲存中…' : '送出') : '使用 Google 登入後評分'}</button>
               </form>
             </div>
           </aside>}
 
-          {addOpen && <aside className="publish-drawer"><div className="drawer-head"><span><p>建立租屋地點</p><h2>新增有人住過的位置</h2><small>不是招租廣告，不填房東電話或即時租金。</small></span><button onClick={() => setAddOpen(false)} aria-label="關閉"><X size={15} /></button></div>
+          {addOpen && <aside className="publish-drawer"><div className="drawer-head"><span><p>新增地點</p><h2>標記租屋位置</h2></span><button onClick={() => setAddOpen(false)} aria-label="關閉"><X size={15} /></button></div>
             <form className="publish-form" onSubmit={submitLocation}>
               <label className="field-wide"><span>完整地址</span><input required minLength={6} maxLength={120} value={draftAddress} onChange={(event) => setDraftAddress(event.target.value)} placeholder="縣市＋區鄉鎮＋路街＋門牌" /></label>
               <div className={`location-status field-wide${locationConfirmed ? ' is-confirmed' : ''}`}><MapPin size={14} />{locationConfirmed ? `已選位置：${draftLatitude.toFixed(5)}, ${draftLongitude.toFixed(5)}` : '請在地圖點選位置'}</div>
               {formError && <p className="form-error field-wide">{formError}</p>}
-              <button className="submit-listing field-wide" disabled={submitting}>{submitting ? '檢查重複地址中…' : '建立租屋地點'}</button>
+              <button className="submit-listing field-wide" disabled={submitting}>{submitting ? '送出中…' : '送出'}</button>
             </form>
           </aside>}
         </div>

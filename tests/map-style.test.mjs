@@ -38,3 +38,19 @@ test('selected rental marker styling never overwrites MapLibre positioning', () 
   assert.ok(selectedRule.length > 0);
   assert.doesNotMatch(selectedRule, /(?:^|;)\s*transform\s*:/);
 });
+
+test('all DOM map markers preserve MapLibre absolute positioning', () => {
+  for (const className of ['campus-marker', 'rent-marker', 'draft-marker']) {
+    const rule = globalStyles.match(new RegExp(`\\.${className}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+    assert.ok(rule.length > 0);
+    assert.match(rule, /position\s*:\s*absolute/);
+    assert.doesNotMatch(rule, /position\s*:\s*relative/);
+  }
+});
+
+test('main rental UI contains public comments without implementation copy', () => {
+  assert.match(rentalExplorer, /公開評論/);
+  for (const hiddenCopy of ['政府地點', '載入 D1', '所有來源平均', '所有評分平均', '固定近似座標', '不重複地點']) {
+    assert.doesNotMatch(rentalExplorer, new RegExp(hiddenCopy));
+  }
+});
