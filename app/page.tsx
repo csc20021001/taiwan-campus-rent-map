@@ -7,23 +7,78 @@ import { ArrowRight, GraduationCap, House, MapPin, ShieldAlert, Star, X } from '
 
 type EntryKind = 'rentals' | 'courses';
 
-const disclaimers: Record<EntryKind, { title: string; description: string; points: string[] }> = {
+type DisclaimerSection = {
+  heading: string;
+  points: string[];
+};
+
+const disclaimers: Record<EntryKind, { title: string; description: string; sections: DisclaimerSection[] }> = {
   rentals: {
-    title: '租屋資訊使用提醒',
-    description: '地圖內容來自政府公開資料與使用者分享，只供查找與經驗交流。',
-    points: [
-      '租金、空房與屋況可能隨時變動，簽約前請向出租人確認並親自看屋。',
-      '本站不參與仲介、收款或簽約，也不保證每筆內容完整或持續有效。',
-      '公開評論代表個別使用者經驗，請自行判斷並保護個人資料。',
+    title: '租屋地圖使用聲明',
+    description: '請先了解資料限制、交易風險與公開發言責任；本服務只能作為找房線索，不能取代看屋、身分查核與正式契約。',
+    sections: [
+      {
+        heading: '資料與地圖限制',
+        points: [
+          '租屋資料可能來自政府公開資料或使用者刊登；歷史租金、平均租金、空房狀態、屋況與地圖座標都可能過時、近似、不完整或有誤，也不代表政府或學校推薦。',
+          '價格與評分是多筆來源的統計或個別經驗，不是估價、鑑價、品質保證或目前成交條件。',
+        ],
+      },
+      {
+        heading: '交易與人身安全',
+        points: [
+          '本站不是房東、承租人、仲介、代管或包租業者，不驗證刊登者身分、所有權或出租權，也不代收款、帶看、議價、簽約或處理糾紛。',
+          '請親自看屋，核對出租人身分、權利證明、設備、費用與契約；未完成查核前，不要只憑本站內容交付訂金、押金、證件或匯款。',
+        ],
+      },
+      {
+        heading: '刊登與公開評論',
+        points: [
+          '只能刊登有權公開且真實的內容；評論應基於親身經驗並區分事實與意見。不得揭露私人聯絡方式、證件、門牌以外的私生活資訊，或發布誹謗、侮辱、侵權、歧視、詐騙與垃圾內容。',
+          '使用者須為自己提交的地址、文字、評分及其他內容負責；有疑義時，本站得標示爭議、限制顯示或移除內容。',
+        ],
+      },
+      {
+        heading: '責任界線與申訴',
+        points: [
+          '外部連結與廣告由第三方提供，出現於本站不代表本站背書。若發現錯誤、詐騙、侵權或個資問題，請寄信至 sjehd363960@gmail.com。',
+          '免責與責任限制只在法律允許的範圍內適用，不排除依法不得預先免除或限制的責任。',
+        ],
+      },
     ],
   },
   courses: {
-    title: '課程評分使用提醒',
-    description: '評分是使用者的個人修課經驗，只供選課參考，不代表客觀事實或校方立場。',
-    points: [
-      '請針對實際修過的課程，依學習收穫、作業量、考試難易與給分標準評分。',
-      '同一門課的體驗可能因學期、授課教師與修課者而不同。',
-      '選課決定與學習結果由使用者自行評估與負責。',
+    title: '課程評分使用聲明',
+    description: '課程資料與評價只供選課參考；評分是個人經驗，不是對教師人格、教學品質或學習成果的客觀認定。',
+    sections: [
+      {
+        heading: '課程資料限制',
+        points: [
+          '課名、教師、系所與連結以學校公開頁面為來源，但開課狀態、授課教師、內容與評量方式可能隨學期變更；請以當學期校方選課系統及公告為準。',
+          '平均分數只彙整有效使用者評分；同一門課的感受會因學期、教師、班別、修課背景與投入程度而不同。',
+        ],
+      },
+      {
+        heading: '評分與發言責任',
+        points: [
+          '請只評價實際修過的課程，並聚焦學習收穫、作業量、考試難易及給分標準；涉及具體事實時，應有合理查證基礎。',
+          '不得以評論為由侮辱、誹謗、騷擾教師或學生，也不得公開私人聯絡方式、住址、健康、家庭、成績等非必要個資，或張貼侵權內容。',
+        ],
+      },
+      {
+        heading: '非校方立場',
+        points: [
+          '本站與各大學、系所及授課教師沒有代理、認證或合作關係；校名、教師姓名與官方連結僅用來辨識公開課程資訊，不表示校方支持本站。',
+          '評分不能保證選課名額、成績、學分承認或學習成果；使用者應依正式課綱與自身需求獨立判斷。',
+        ],
+      },
+      {
+        heading: '更正、申訴與責任界線',
+        points: [
+          '若資料有誤，或內容涉及侵權、名譽、隱私等問題，請寄信至 sjehd363960@gmail.com；本站得在查核期間限制顯示或移除內容。',
+          '免責與責任限制只在法律允許的範圍內適用，不排除依法不得預先免除或限制的責任。',
+        ],
+      },
     ],
   },
 };
@@ -82,8 +137,14 @@ export default function Home() {
           <p>使用前請先閱讀</p>
           <h2 id="entry-disclaimer-title">{disclaimer.title}</h2>
           <span className="entry-disclaimer-intro">{disclaimer.description}</span>
-          <ul>{disclaimer.points.map((point) => <li key={point}>{point}</li>)}</ul>
-          <label className="entry-consent"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} /><span>我已閱讀並同意以上提醒</span></label>
+          <div className="entry-disclaimer-sections">
+            {disclaimer.sections.map((section) => <section key={section.heading}>
+              <h3>{section.heading}</h3>
+              <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>
+            </section>)}
+          </div>
+          <p className="entry-disclaimer-note">完整規範請見 <Link href="/terms" target="_blank">服務條款</Link> 與 <Link href="/privacy" target="_blank">隱私權政策</Link>。本聲明為一般風險提示，不構成法律、租賃或選課建議。</p>
+          <label className="entry-consent"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} /><span>我已閱讀、理解並同意以上聲明</span></label>
           <div className="entry-disclaimer-actions"><button type="button" onClick={closeDisclaimer}>取消</button><button type="button" disabled={!agreed} onClick={continueToEntry}>同意並前往</button></div>
         </section>
       </div>}

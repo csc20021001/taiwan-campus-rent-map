@@ -13,10 +13,22 @@ test('homepage asks users to choose rentals or courses', () => {
   assert.match(home, /查課程/);
   assert.match(home, /四項評分/);
   assert.match(home, /role="dialog"/);
-  assert.match(home, /我已閱讀並同意以上提醒/);
+  assert.match(home, /我已閱讀、理解並同意以上聲明/);
   assert.match(home, /disabled=\{!agreed\}/);
   assert.match(home, /router\.push\(`\/\$\{entry\}`\)/);
   assert.doesNotMatch(home, /RentalExplorer/);
+});
+
+test('entry disclaimers cover the material rental and course risks', () => {
+  assert.match(home, /資料與地圖限制/);
+  assert.match(home, /交易與人身安全/);
+  assert.match(home, /刊登與公開評論/);
+  assert.match(home, /課程資料限制/);
+  assert.match(home, /評分與發言責任/);
+  assert.match(home, /非校方立場/);
+  assert.match(home, /依法不得預先免除或限制的責任/);
+  assert.match(home, /href="\/terms"/);
+  assert.match(home, /href="\/privacy"/);
 });
 
 test('rental map remains available on its dedicated route', () => {
