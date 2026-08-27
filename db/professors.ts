@@ -5,6 +5,7 @@ export type ProfessorView = {
   universityId: string;
   department: string;
   name: string;
+  officialSourceUrl: string;
   averageRating: number | null;
   ratingCount: number;
 };
@@ -14,6 +15,7 @@ type ProfessorRow = {
   university_id: string;
   department: string;
   name: string;
+  official_source_url: string;
   average_rating: number | null;
   rating_count: number;
 };
@@ -24,6 +26,7 @@ function mapProfessor(row: ProfessorRow): ProfessorView {
     universityId: row.university_id,
     department: row.department,
     name: row.name,
+    officialSourceUrl: row.official_source_url,
     averageRating: row.average_rating === null ? null : Number(row.average_rating),
     ratingCount: Number(row.rating_count),
   };
@@ -46,7 +49,7 @@ export async function listProfessors(filters: { universityId?: string; departmen
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await getD1().prepare(`
-    SELECT p.id, p.university_id, p.department, p.name,
+    SELECT p.id, p.university_id, p.department, p.name, p.official_source_url,
       ROUND(AVG(pr.easy_to_pass_score), 1) AS average_rating,
       COUNT(pr.id) AS rating_count
     FROM professors p
@@ -61,7 +64,7 @@ export async function listProfessors(filters: { universityId?: string; departmen
 
 export async function getProfessor(id: string) {
   const row = await getD1().prepare(`
-    SELECT p.id, p.university_id, p.department, p.name,
+    SELECT p.id, p.university_id, p.department, p.name, p.official_source_url,
       ROUND(AVG(pr.easy_to_pass_score), 1) AS average_rating,
       COUNT(pr.id) AS rating_count
     FROM professors p

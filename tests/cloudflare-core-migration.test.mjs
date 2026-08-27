@@ -6,6 +6,7 @@ import test from 'node:test';
 const coreMigration = readFileSync(new URL('../drizzle/0004_cloudflare_core.sql', import.meta.url), 'utf8');
 const seedMigration = readFileSync(new URL('../drizzle/0005_seed_government_rentals.sql', import.meta.url), 'utf8');
 const coordinateMigration = readFileSync(new URL('../drizzle/0006_fixed_absolute_coordinates.sql', import.meta.url), 'utf8');
+const professorSourceMigration = readFileSync(new URL('../drizzle/0007_official_professor_sources.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -23,8 +24,24 @@ function databaseWithCore() {
       ('ntu'), ('nthu'), ('nycu'), ('ncku'), ('ncu'), ('nchu'), ('nsysu'), ('ccu'), ('ntust'), ('ntut'), ('niu');
   `);
   apply(database, coreMigration);
+  apply(database, professorSourceMigration);
   return database;
 }
+
+test('professors retain an official public source URL', () => {
+  const database = databaseWithCore();
+  database.exec(`
+    INSERT INTO professors
+      (id, university_id, department, name, official_source_url, created_at, updated_at)
+    VALUES
+      ('prof-source-1', 'ntu', '農業經濟學系', '陳教授',
+       'https://www.agec.ntu.edu.tw/zh_tw/teacher', 'now', 'now');
+  `);
+  const professor = database.prepare(`
+    SELECT official_source_url FROM professors WHERE id = 'prof-source-1'
+  `).get();
+  assert.equal(professor.official_source_url, 'https://www.agec.ntu.edu.tw/zh_tw/teacher');
+});
 
 test('government seed is de-duplicated and associated with all supplied schools', () => {
   const database = databaseWithCore();

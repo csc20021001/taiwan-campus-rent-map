@@ -4,6 +4,7 @@ import * as schema from './schema';
 import { universities } from '../app/data';
 import { rentalSeeds } from './rental-seeds.generated';
 import { fixedAbsoluteCoordinate } from './rental-coordinate-overrides.mjs';
+import { professorSeeds } from './professors-seeds.generated';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -41,6 +42,14 @@ async function ensureUniversityCreatedAt() {
   }
 }
 
+async function ensureProfessorOfficialSourceUrl() {
+  const db = getD1();
+  const tableInfo = await db.prepare('PRAGMA table_info(professors)').all<{ name: string }>();
+  if (tableInfo.results.length > 0 && !tableInfo.results.some((column) => column.name === 'official_source_url')) {
+    await db.prepare("ALTER TABLE professors ADD COLUMN official_source_url TEXT NOT NULL DEFAULT ''").run();
+  }
+}
+
 async function runBatches(statements: D1PreparedStatement[], size = 80) {
   const db = getD1();
   for (let index = 0; index < statements.length; index += size) {
@@ -56,6 +65,7 @@ async function initializeCoreTables() {
       university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
       department TEXT NOT NULL,
       name TEXT NOT NULL,
+      official_source_url TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`),
@@ -111,6 +121,7 @@ async function initializeCoreTables() {
       PRIMARY KEY (user_id, action, window_started_at)
     )`),
   ]);
+  await ensureProfessorOfficialSourceUrl();
   await db.batch([
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_identity ON professors(university_id, department, name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_university ON professors(university_id)'),
@@ -129,6 +140,20 @@ async function initializeCoreTables() {
     db.prepare('CREATE INDEX IF NOT EXISTS idx_rental_reports_aggregate ON rental_reports(rental_location_id, is_valid, is_outlier)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_api_rate_limits_cleanup ON api_rate_limits(window_started_at)'),
   ]);
+}
+
+async function seedProfessors() {
+  const db = getD1();
+  const timestamp = '2026-08-27T00:00:00.000Z';
+  const statements = professorSeeds.map((seed) => db.prepare(`
+    INSERT INTO professors (
+      id, university_id, department, name, official_source_url, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(university_id, department, name) DO UPDATE SET
+      official_source_url = excluded.official_source_url,
+      updated_at = excluded.updated_at
+  `).bind(seed.id, seed.universityId, seed.department, seed.name, seed.sourceUrl, timestamp, timestamp));
+  await runBatches(statements);
 }
 
 async function seedRentalLocations() {
@@ -280,6 +305,7 @@ async function initializeDatabase() {
   await db.batch(schoolSeeds);
 
   await initializeCoreTables();
+  await seedProfessors();
   await seedRentalLocations();
 }
 

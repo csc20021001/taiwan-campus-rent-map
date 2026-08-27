@@ -74,6 +74,7 @@ export const professors = sqliteTable('professors', {
   universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
   department: text('department').notNull(),
   name: text('name').notNull(),
+  officialSourceUrl: text('official_source_url').notNull().default(''),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [

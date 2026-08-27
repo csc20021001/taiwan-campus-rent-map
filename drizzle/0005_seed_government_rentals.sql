@@ -119,8 +119,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-a8d60303f3213b86', 'nthu', '新竹市公道五路二段425之5號',
-  '新竹市公道五路二段425之5號', 24.7960627, 121.0117186,
-  'government', 40000, 'government', 'nominatim',
+  '新竹市公道五路二段425之5號', 24.79622, 121.0122,
+  'government', 40000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -148,8 +148,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-c7b7e611166571ad', 'nthu', '新竹市公道五路二段313號',
-  '新竹市公道五路二段313號', 24.7960627, 121.0117186,
-  'government', 50000, 'government', 'nominatim',
+  '新竹市公道五路二段313號', 24.796, 121.01091,
+  'government', 50000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -177,8 +177,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-73897ec18b99bfda', 'nthu', '新竹市公道五路二段293號',
-  '新竹市公道五路二段293號', 24.7960627, 121.0117186,
-  'government', 34056, 'government', 'nominatim',
+  '新竹市公道五路二段293號', 24.79592, 121.0103,
+  'government', 34056, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -200,8 +200,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-7102d3f9d9b0a585', 'nthu', '新竹市公道五路二段299號',
-  '新竹市公道五路二段299號', 24.7960627, 121.0117186,
-  'government', 61231, 'government', 'nominatim',
+  '新竹市公道五路二段299號', 24.79594, 121.0105,
+  'government', 61231, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -252,8 +252,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-9fd0e61a542be679', 'nycu', '新竹市世傑路72號',
-  '新竹市世傑路72號', 24.7919624, 121.0096343,
-  'government', 32500, 'government', 'nominatim',
+  '新竹市世傑路72號', 24.7906, 121.0079,
+  'government', 32500, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -275,8 +275,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-39cd84e979219bcd', 'nycu', '新竹市世傑路116號',
-  '新竹市世傑路116號', 24.7919624, 121.0096343,
-  'government', 25000, 'government', 'nominatim',
+  '新竹市世傑路116號', 24.79105, 121.00835,
+  'government', 25000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -298,8 +298,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-c968e9f50b264364', 'ncku', '臺南市東區東門路一段61號之9',
-  '臺南市東區東門路一段61號之9', 22.9867164, 120.2177839,
-  'government', 6000, 'government', 'nominatim',
+  '臺南市東區東門路一段61號之9', 22.9875, 120.2144,
+  'government', 6000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -321,8 +321,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-b1951bbeab44b3a5', 'ncku', '臺南市東區勝利路115號七樓之2',
-  '臺南市東區勝利路115號七樓之2', 22.9951192, 120.2181162,
-  'government', 8500, 'government', 'nominatim',
+  '臺南市東區勝利路115號七樓之2', 23.0012, 120.2176,
+  'government', 8500, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -344,8 +344,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-2bb9feed968d5512', 'ncku', '臺南市東區東門路一段298號八樓之2',
-  '臺南市東區東門路一段298號八樓之2', 22.9867164, 120.2177839,
-  'government', 17000, 'government', 'nominatim',
+  '臺南市東區東門路一段298號八樓之2', 22.9863, 120.2211,
+  'government', 17000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -528,8 +528,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-006773df92ee9d96', 'nchu', '臺中市南區學府路3號',
-  '臺中市南區學府路3號', 24.1288776, 120.6741113,
-  'government', 14000, 'government', 'nominatim',
+  '臺中市南區學府路3號', 24.1285, 120.67395,
+  'government', 14000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -643,8 +643,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-8bc9393d0e77f40e', 'nsysu', '高雄市鼓山區濱海一路88巷16號',
-  '高雄市鼓山區濱海一路88巷16號', 22.6203435, 120.2707284,
-  'government', NULL, 'government', 'nominatim',
+  '高雄市鼓山區濱海一路88巷16號', 22.6203, 120.27055,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -666,8 +666,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-fe4b096efbdf14df', 'nsysu', '高雄市鼓山區濱海一路88巷26號',
-  '高雄市鼓山區濱海一路88巷26號', 22.6203435, 120.2707284,
-  'government', NULL, 'government', 'nominatim',
+  '高雄市鼓山區濱海一路88巷26號', 22.62045, 120.2708,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -689,8 +689,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-190f966b819ecd0b', 'nsysu', '高雄市鼓山區濱海一路88巷28號',
-  '高雄市鼓山區濱海一路88巷28號', 22.6203435, 120.2707284,
-  'government', NULL, 'government', 'nominatim',
+  '高雄市鼓山區濱海一路88巷28號', 22.62048, 120.27085,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -712,8 +712,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-d3766154e172ebc8', 'nsysu', '高雄市鼓山區濱海一路88巷22號',
-  '高雄市鼓山區濱海一路88巷22號', 22.6203435, 120.2707284,
-  'government', NULL, 'government', 'nominatim',
+  '高雄市鼓山區濱海一路88巷22號', 22.62039, 120.2707,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -735,8 +735,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-f6b691648fc0267d', 'nsysu', '高雄市鼓山區濱海一路88巷20號',
-  '高雄市鼓山區濱海一路88巷20號', 22.6203435, 120.2707284,
-  'government', NULL, 'government', 'nominatim',
+  '高雄市鼓山區濱海一路88巷20號', 22.62036, 120.27065,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -804,8 +804,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-264f3ac40989a580', 'ccu', '嘉義縣民雄鄉鎮北村圳溝墘21號三樓之14',
-  '嘉義縣民雄鄉鎮北村圳溝墘21號三樓之14', 23.571561, 120.448288,
-  'government', 4700, 'government', 'nominatim',
+  '嘉義縣民雄鄉鎮北村圳溝墘21號三樓之14', 23.57162, 120.44838,
+  'government', 4700, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -827,8 +827,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-221e3373cda29b1b', 'ccu', '嘉義縣民雄鄉鎮北村圳溝墘20號二樓之一',
-  '嘉義縣民雄鄉鎮北村圳溝墘20號二樓之一', 23.571561, 120.448288,
-  'government', 5000, 'government', 'nominatim',
+  '嘉義縣民雄鄉鎮北村圳溝墘20號二樓之一', 23.57156, 120.44828,
+  'government', 5000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -850,8 +850,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-ee599ba0dd231ae1', 'ccu', '嘉義縣民雄鄉鎮北村圳溝墘19號四樓之三',
-  '嘉義縣民雄鄉鎮北村圳溝墘19號四樓之三', 23.571561, 120.448288,
-  'government', 4300, 'government', 'nominatim',
+  '嘉義縣民雄鄉鎮北村圳溝墘19號四樓之三', 23.5715, 120.44818,
+  'government', 4300, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -919,8 +919,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-73fbabc950d74cd3', 'ntust', '臺北市文山區羅斯福路四段210號',
-  '臺北市文山區羅斯福路四段210號', 25.0103997, 121.5371773,
-  'government', 19000, 'government', 'nominatim',
+  '臺北市文山區羅斯福路四段210號', 25.0106, 121.53735,
+  'government', 19000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -942,8 +942,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-8c0a5e1877fc1cff', 'ntust', '臺北市文山區羅斯福路四段202號',
-  '臺北市文山區羅斯福路四段202號', 25.0103997, 121.5371773,
-  'government', 30483, 'government', 'nominatim',
+  '臺北市文山區羅斯福路四段202號', 25.01045, 121.53718,
+  'government', 30483, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -965,8 +965,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-702ad5ab5175f77e', 'ntust', '臺北市文山區羅斯福路四段200號',
-  '臺北市文山區羅斯福路四段200號', 25.0103997, 121.5371773,
-  'government', 18000, 'government', 'nominatim',
+  '臺北市文山區羅斯福路四段200號', 25.0104, 121.5371,
+  'government', 18000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -988,8 +988,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-053762df951e69f8', 'ntut', '臺北市大安區忠孝東路三段52號',
-  '臺北市大安區忠孝東路三段52號', 25.0419275, 121.5360576,
-  'government', 47550, 'government', 'nominatim',
+  '臺北市大安區忠孝東路三段52號', 25.0419, 121.53582,
+  'government', 47550, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -1011,8 +1011,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-6512b0c9eb183f74', 'ntut', '臺北市大安區忠孝東路三段54號',
-  '臺北市大安區忠孝東路三段54號', 25.0419275, 121.5360576,
-  'government', 45000, 'government', 'nominatim',
+  '臺北市大安區忠孝東路三段54號', 25.04193, 121.53606,
+  'government', 45000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -1034,8 +1034,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-8994b2e45ba4b4a7', 'ntut', '臺北市大安區忠孝東路三段88號',
-  '臺北市大安區忠孝東路三段88號', 25.0419275, 121.5360576,
-  'government', 35000, 'government', 'nominatim',
+  '臺北市大安區忠孝東路三段88號', 25.04198, 121.53685,
+  'government', 35000, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -1103,8 +1103,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-45eb52bbba9644a0', 'niu', '宜蘭縣宜蘭市神農路二段127號',
-  '宜蘭縣宜蘭市神農路二段127號', 24.7514864, 121.7509979,
-  'government', NULL, 'government', 'nominatim',
+  '宜蘭縣宜蘭市神農路二段127號', 24.75149, 121.751,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -1126,8 +1126,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-40e46090723eb129', 'niu', '宜蘭縣宜蘭市神農路二段125號',
-  '宜蘭縣宜蘭市神農路二段125號', 24.7514864, 121.7509979,
-  'government', NULL, 'government', 'nominatim',
+  '宜蘭縣宜蘭市神農路二段125號', 24.75142, 121.75094,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,
@@ -1172,8 +1172,8 @@ INSERT INTO rental_locations (
   created_by_user_id, created_at, updated_at
 ) VALUES (
   'gov-d7b13d4e2f205595', 'niu', '宜蘭縣宜蘭市神農路二段50號',
-  '宜蘭縣宜蘭市神農路二段50號', 24.7514864, 121.7509979,
-  'government', NULL, 'government', 'nominatim',
+  '宜蘭縣宜蘭市神農路二段50號', 24.7492, 121.7507,
+  'government', NULL, 'government', 'fixed_absolute_estimate',
   0, NULL, '2026-08-26T00:00:00.000Z', '2026-08-26T00:00:00.000Z'
 ) ON CONFLICT(normalized_address) DO UPDATE SET
   reference_rent = excluded.reference_rent,

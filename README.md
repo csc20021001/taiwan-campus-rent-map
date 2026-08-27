@@ -101,7 +101,7 @@ npm run dev
 - `drizzle/0005_seed_government_rentals.sql`：本次 55 筆輸入去重後的 D1 初始地點
 - `drizzle/0006_fixed_absolute_coordinates.sql`：把共用街道中心點的房屋改為固定、未驗證的絕對座標
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
-- `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入未來提供的教授姓名、系所與學校
+- `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 
 ```bash
 npm run seed:build
@@ -118,11 +118,17 @@ npx wrangler d1 migrations apply <DATABASE_NAME> --remote
 
 ```json
 [
-  { "id": "ntu-cs-example", "universityId": "ntu", "department": "資訊工程學系", "name": "王教授" }
+  {
+    "id": "ntu-agec-example",
+    "universityId": "ntu",
+    "department": "農業經濟學系",
+    "name": "陳教授",
+    "sourceUrl": "https://www.agec.ntu.edu.tw/zh_tw/teacher"
+  }
 ]
 ```
 
-目前使用者沒有提供教授名單，因此不製造姓名；教授表、API、搜尋、評分與空狀態均已完成。
+目前首批收錄 11 校、167 筆官方公開師資資料，涵蓋每校一個已核對的系所或研究所；其餘系所逐批建置。建置腳本會拒絕非 HTTPS、非該校官方網域的來源網址，論壇及第三方名錄不會被匯入。
 
 ## 品質檢查
 
