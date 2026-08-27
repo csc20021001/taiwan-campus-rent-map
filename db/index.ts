@@ -1,11 +1,12 @@
 import { env } from 'cloudflare:workers';
 import { drizzle } from 'drizzle-orm/d1';
 import * as schema from './schema';
-import { universities } from '../app/data';
+import { rentalCampuses } from '../app/data';
 import { rentalSeeds } from './rental-seeds.generated';
 import { fixedAbsoluteCoordinate } from './rental-coordinate-overrides.mjs';
 import { professorSeeds } from './professors-seeds.generated';
 import { departmentSeeds } from './department-seeds';
+import { currentGovernmentRentalSeeds } from './current-government-rental-seeds';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -66,6 +67,61 @@ async function ensureProfessorRatingDimensions() {
   for (const [column, sql] of additions) {
     if (!existing.has(column)) await db.prepare(sql).run();
   }
+}
+
+async function ensureUnifiedProfessorIdentities() {
+  const db = getD1();
+  const identityIndex = await db.prepare(`SELECT sql FROM sqlite_master
+    WHERE type = 'index' AND name = 'idx_professors_identity'`).first<{ sql: string | null }>();
+  if (identityIndex?.sql && !/department/i.test(identityIndex.sql)) return;
+
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS _professor_identity_map (
+      old_id TEXT PRIMARY KEY NOT NULL,
+      canonical_id TEXT NOT NULL,
+      merged_department TEXT NOT NULL
+    )`),
+    db.prepare('DELETE FROM _professor_identity_map'),
+    db.prepare(`INSERT INTO _professor_identity_map (old_id, canonical_id, merged_department)
+      SELECT p.id, grouped.canonical_id, grouped.merged_department
+      FROM professors p
+      JOIN (
+        SELECT university_id, name, MIN(id) AS canonical_id,
+          REPLACE(GROUP_CONCAT(DISTINCT department), ',', '／') AS merged_department
+        FROM professors GROUP BY university_id, name
+      ) grouped ON grouped.university_id = p.university_id AND grouped.name = p.name`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS _professor_rating_rank (
+      rating_id TEXT PRIMARY KEY NOT NULL,
+      canonical_id TEXT NOT NULL,
+      identity_rank INTEGER NOT NULL
+    )`),
+    db.prepare('DELETE FROM _professor_rating_rank'),
+    db.prepare(`INSERT INTO _professor_rating_rank (rating_id, canonical_id, identity_rank)
+      SELECT pr.id, identity_map.canonical_id,
+        ROW_NUMBER() OVER (
+          PARTITION BY pr.user_id, identity_map.canonical_id
+          ORDER BY pr.updated_at DESC, pr.id DESC
+        ) AS identity_rank
+      FROM professor_ratings pr
+      JOIN _professor_identity_map identity_map ON identity_map.old_id = pr.professor_id`),
+    db.prepare(`DELETE FROM professor_ratings
+      WHERE id IN (SELECT rating_id FROM _professor_rating_rank WHERE identity_rank > 1)`),
+    db.prepare(`UPDATE professor_ratings SET professor_id = (
+        SELECT canonical_id FROM _professor_rating_rank WHERE rating_id = professor_ratings.id
+      ) WHERE id IN (SELECT rating_id FROM _professor_rating_rank WHERE identity_rank = 1)`),
+    db.prepare(`DELETE FROM professors WHERE id IN (
+      SELECT old_id FROM _professor_identity_map WHERE old_id != canonical_id
+    )`),
+    db.prepare(`UPDATE professors SET department = (
+        SELECT merged_department FROM _professor_identity_map
+        WHERE canonical_id = professors.id LIMIT 1
+      ), updated_at = CURRENT_TIMESTAMP
+      WHERE id IN (SELECT canonical_id FROM _professor_identity_map)`),
+    db.prepare('DROP INDEX IF EXISTS idx_professors_identity'),
+    db.prepare('CREATE UNIQUE INDEX idx_professors_identity ON professors(university_id, name)'),
+    db.prepare('DROP TABLE _professor_rating_rank'),
+    db.prepare('DROP TABLE _professor_identity_map'),
+  ]);
 }
 
 async function runBatches(statements: D1PreparedStatement[], size = 80) {
@@ -165,11 +221,11 @@ async function initializeCoreTables() {
   ]);
   await ensureProfessorOfficialSourceUrl();
   await ensureProfessorRatingDimensions();
+  await ensureUnifiedProfessorIdentities();
   await db.batch([
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_departments_identity ON academic_departments(university_id, name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_academic_departments_university_college ON academic_departments(university_id, college, name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_academic_departments_name ON academic_departments(name)'),
-    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_identity ON professors(university_id, department, name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_university ON professors(university_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_department ON professors(department)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_professors_name ON professors(name)'),
@@ -216,7 +272,8 @@ async function seedProfessors() {
     INSERT INTO professors (
       id, university_id, department, name, official_source_url, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(university_id, department, name) DO UPDATE SET
+    ON CONFLICT(university_id, name) DO UPDATE SET
+      department = excluded.department,
       official_source_url = excluded.official_source_url,
       updated_at = excluded.updated_at
   `).bind(seed.id, seed.universityId, seed.department, seed.name, seed.sourceUrl, timestamp, timestamp));
@@ -276,6 +333,34 @@ async function seedRentalLocations() {
       WHERE normalized_address = '260宜蘭縣宜蘭市思源里宜中路82號'
       ON CONFLICT(rental_location_id, university_id) DO NOTHING`).bind(timestamp),
   ]);
+
+  const currentLocationStatements = currentGovernmentRentalSeeds.flatMap((seed) => [
+    db.prepare(`INSERT INTO rental_locations (
+      id, university_id, address, normalized_address, latitude, longitude, source,
+      reference_rent, reference_rent_source, coordinate_source, coordinates_verified,
+      created_by_user_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'government', ?, ?, ?, 0, NULL, ?, ?)
+    ON CONFLICT(normalized_address) DO UPDATE SET
+      university_id = excluded.university_id,
+      source = 'government',
+      reference_rent = excluded.reference_rent,
+      reference_rent_source = excluded.reference_rent_source,
+      latitude = excluded.latitude,
+      longitude = excluded.longitude,
+      coordinate_source = excluded.coordinate_source,
+      coordinates_verified = 0,
+      created_at = excluded.created_at,
+      updated_at = excluded.updated_at`).bind(
+      seed.id, seed.universityId, seed.address, seed.normalizedAddress,
+      seed.latitude, seed.longitude, seed.referenceRent, seed.referenceRentSource,
+      seed.coordinateSource, seed.createdAt, seed.createdAt,
+    ),
+    db.prepare(`INSERT INTO rental_location_universities (rental_location_id, university_id, created_at)
+      SELECT id, ?, ? FROM rental_locations WHERE normalized_address = ?
+      ON CONFLICT(rental_location_id, university_id) DO NOTHING`)
+      .bind(seed.universityId, seed.createdAt, seed.normalizedAddress),
+  ]);
+  await runBatches(currentLocationStatements);
 }
 
 async function initializeDatabase() {
@@ -355,7 +440,7 @@ async function initializeDatabase() {
     db.prepare(`DELETE FROM listings WHERE id IN (${placeholders})`).bind(...sampleListingIds),
   ]);
 
-  const schoolSeeds = universities.map((school) => db.prepare(`
+  const schoolSeeds = rentalCampuses.map((school) => db.prepare(`
     INSERT INTO universities
       (id, name, short_name, city, district, latitude, longitude, address, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -10,6 +10,8 @@ const professorSourceMigration = readFileSync(new URL('../drizzle/0007_official_
 const academicUnitsMigration = readFileSync(new URL('../drizzle/0008_academic_units_and_rating_dimensions.sql', import.meta.url), 'utf8');
 const rentalCommentsMigration = readFileSync(new URL('../drizzle/0009_rental_comments.sql', import.meta.url), 'utf8');
 const professorLearningMigration = readFileSync(new URL('../drizzle/0010_professor_learning_score.sql', import.meta.url), 'utf8');
+const unifiedProfessorMigration = readFileSync(new URL('../drizzle/0011_unify_professor_identities.sql', import.meta.url), 'utf8');
+const currentRentalMigration = readFileSync(new URL('../drizzle/0012_nycu_campuses_and_current_rentals.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -21,7 +23,16 @@ function databaseWithCore() {
   const database = new DatabaseSync(':memory:');
   database.exec(`
     PRAGMA foreign_keys = ON;
-    CREATE TABLE universities (id TEXT PRIMARY KEY NOT NULL);
+    CREATE TABLE universities (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      short_name TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      district TEXT NOT NULL DEFAULT '',
+      latitude REAL NOT NULL DEFAULT 0,
+      longitude REAL NOT NULL DEFAULT 0,
+      address TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL);
     INSERT INTO universities (id) VALUES
       ('ntu'), ('nthu'), ('nycu'), ('ncku'), ('ncu'), ('nchu'), ('nsysu'), ('ccu'), ('ntust'), ('ntut'), ('niu');
@@ -95,6 +106,32 @@ test('professors retain an official public source URL', () => {
   assert.equal(professor.official_source_url, 'https://www.agec.ntu.edu.tw/zh_tw/teacher');
 });
 
+test('same university professor shares one identity and one rating across units', () => {
+  const database = databaseWithCore();
+  database.exec(`
+    INSERT INTO users (id) VALUES ('merge-user');
+    INSERT INTO professors (id, university_id, department, name, official_source_url, created_at, updated_at)
+    VALUES
+      ('prof-a', 'ntu', '資訊工程學系', '林老師', 'https://www.ntu.edu.tw/', 'now', '2026-01-01'),
+      ('prof-b', 'ntu', '資料科學學位學程', '林老師', 'https://www.ntu.edu.tw/', 'now', '2026-01-02');
+    INSERT INTO professor_ratings
+      (id, professor_id, user_id, easy_to_pass_score, attitude_score, learning_score, workload_score,
+       exam_difficulty_score, grading_standard_score, created_at, updated_at)
+    VALUES
+      ('rating-a', 'prof-a', 'merge-user', 3, 3, 3, 3, 3, 3, 'now', '2026-01-01'),
+      ('rating-b', 'prof-b', 'merge-user', 4, 4, 4, 4, 4, 4, 'now', '2026-01-02');
+  `);
+  apply(database, unifiedProfessorMigration);
+  const professor = database.prepare("SELECT id, department FROM professors WHERE university_id = 'ntu' AND name = '林老師'").get();
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM professors WHERE university_id = 'ntu' AND name = '林老師'").get().count, 1);
+  assert.deepEqual(new Set(professor.department.split('／')), new Set(['資訊工程學系', '資料科學學位學程']));
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM professor_ratings WHERE professor_id = ?').get(professor.id).count, 1);
+  assert.equal(database.prepare('SELECT attitude_score FROM professor_ratings WHERE professor_id = ?').get(professor.id).attitude_score, 4);
+  assert.throws(() => database.exec(`INSERT INTO professors
+    (id, university_id, department, name, official_source_url, created_at, updated_at)
+    VALUES ('prof-c', 'ntu', '其他學程', '林老師', 'https://www.ntu.edu.tw/', 'now', 'now')`), /UNIQUE/);
+});
+
 test('government seed is de-duplicated and associated with all supplied schools', () => {
   const database = databaseWithCore();
   apply(database, seedMigration);
@@ -107,6 +144,16 @@ test('government seed is de-duplicated and associated with all supplied schools'
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM rental_locations
     WHERE normalized_address = '新竹市世傑路288號'`).get().count, 1);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_reports').get().count, 0);
+});
+
+test('current government listings and both NYCU campuses migrate', () => {
+  const database = databaseWithCore();
+  apply(database, seedMigration);
+  apply(database, currentRentalMigration);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM universities WHERE id = 'nycu-yangming'").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM rental_locations WHERE id LIKE 'moe-current-%'").get().count, 3);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM rental_locations WHERE id LIKE 'moe-current-%' AND source = 'government'").get().count, 3);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM rental_locations WHERE id LIKE 'moe-current-%' AND reference_rent_source LIKE '教育部雲端租屋生活網%'").get().count, 3);
 });
 
 test('fixed absolute migration separates shared street centroids', () => {

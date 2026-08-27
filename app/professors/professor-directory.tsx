@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, ExternalLink, GraduationCap, LogIn, Search, ShieldCheck, Star, X } from 'lucide-react';
+import { ArrowLeft, Check, GraduationCap, LogIn, Search, ShieldCheck, Star, X } from 'lucide-react';
 import { universities } from '@/app/data';
 
 type Professor = {
@@ -10,7 +10,6 @@ type Professor = {
   universityId: string;
   department: string;
   name: string;
-  officialSourceUrl: string;
   averageRating: number | null;
   averageAttitude: number | null;
   averageLearning: number | null;
@@ -113,8 +112,6 @@ export function ProfessorDirectory() {
     return [...grouped.entries()];
   }, [departments]);
 
-  const sourceUrl = departments[0]?.officialSourceUrl;
-
   function openRating(professor: Professor) {
     if (!auth.user) {
       window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/professors')}`);
@@ -148,7 +145,7 @@ export function ProfessorDirectory() {
   return <main className="professor-page">
     <header className="professor-topbar"><Link href="/rentals"><ArrowLeft size={15} />回租屋地圖</Link><span className="professor-brand"><GraduationCap size={18} />WZUNAA</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fprofessors"><LogIn size={14} />Google 登入</a>}</header>
     <section className="professor-hero"><p><Star size={14} fill="currentColor" />教授評分專區</p><h1>{school.shortName}教授評分</h1><span>看看學生對教學、學習收穫、作業、考試與給分的評價</span></section>
-    <p className="professor-source-note"><ShieldCheck size={14} />已收錄 {departmentsLoading ? '…' : departments.length} 個系所與學位單位。{sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查看學校網站<ExternalLink size={11} /></a>}</p>
+    <p className="professor-source-note"><ShieldCheck size={14} />已收錄 {departmentsLoading ? '…' : departments.length} 個系所與學位單位。</p>
     <section className="professor-controls">
       <label>學校<select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label><Search size={14} />搜尋老師或系所<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="輸入姓名或系所" /></label>
@@ -160,7 +157,6 @@ export function ProfessorDirectory() {
       {!loading && professors.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}目前沒有老師資料` : '目前沒有老師資料'}</strong><span>請試著切換系所或搜尋其他姓名。</span></div>}
       {professors.map((professor) => <article className={`professor-card ${ratingTargetId === professor.id ? 'is-rating' : ''}`} key={professor.id}>
         <small>{professor.department}</small><h2>{professor.name}</h2>
-        <a className="professor-official-link" href={professor.officialSourceUrl} target="_blank" rel="noreferrer">查看官方師資頁<ExternalLink size={12} /></a>
         <div className="professor-score"><Star size={18} fill="currentColor" /><strong>{professor.averageRating === null ? '—' : professor.averageRating.toFixed(1)}</strong><span>/ 5 · {professor.ratingCount} 人評分</span></div>
         <dl className="professor-dimensions">
           {ratingDimensions.map((dimension) => <div key={dimension.key}><dt>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</dt><dd>{professor[dimension.averageKey] === null ? '—' : professor[dimension.averageKey]!.toFixed(1)}</dd></div>)}

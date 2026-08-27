@@ -7,10 +7,14 @@ const rentalsPage = readFileSync(new URL('../app/rentals/page.tsx', import.meta.
 
 test('homepage asks users to choose rentals or professors', () => {
   assert.match(home, /今天想查什麼/);
-  assert.match(home, /href="\/rentals"/);
+  assert.match(home, /openDisclaimer\('rentals'\)/);
   assert.match(home, /查房子/);
-  assert.match(home, /href="\/professors"/);
+  assert.match(home, /openDisclaimer\('professors'\)/);
   assert.match(home, /查教授/);
+  assert.match(home, /role="dialog"/);
+  assert.match(home, /我已閱讀並同意以上提醒/);
+  assert.match(home, /disabled=\{!agreed\}/);
+  assert.match(home, /router\.push\(`\/\$\{entry\}`\)/);
   assert.doesNotMatch(home, /RentalExplorer/);
 });
 

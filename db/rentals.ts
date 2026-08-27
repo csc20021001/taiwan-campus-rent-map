@@ -95,7 +95,7 @@ export async function listRentalLocations(options: {
     LEFT JOIN rental_reports r ON r.rental_location_id = l.id
     WHERE ${conditions.join(' AND ')}
     GROUP BY l.id, lu.university_id
-    ORDER BY price_source_count DESC, l.reference_rent IS NULL, average_rent ASC, l.address ASC
+    ORDER BY l.created_at DESC, price_source_count DESC, l.reference_rent IS NULL, average_rent ASC, l.address ASC
     LIMIT 250
   `).bind(...values).all<RentalRow>();
 

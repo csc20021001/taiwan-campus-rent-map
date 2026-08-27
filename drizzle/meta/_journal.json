@@ -64,6 +64,20 @@
       "when": 1787841000000,
       "tag": "0008_academic_units_and_rating_dimensions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1787844000000,
+      "tag": "0011_unify_professor_identities",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1787845000000,
+      "tag": "0012_nycu_campuses_and_current_rentals",
+      "breakpoints": true
     }
   ]
 }

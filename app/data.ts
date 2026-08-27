@@ -42,3 +42,20 @@ export const universities: University[] = [
   { id: 'ntut', name: '國立臺北科技大學', shortName: '北科', city: '臺北市', district: '大安區', latitude: 25.0422, longitude: 121.5355, address: '臺北市大安區忠孝東路三段1號' },
   { id: 'niu', name: '國立宜蘭大學', shortName: '宜大', city: '宜蘭縣', district: '宜蘭市', latitude: 24.7462, longitude: 121.7463, address: '宜蘭縣宜蘭市神農路一段1號' },
 ];
+
+export const rentalCampuses: University[] = universities.flatMap((university) => {
+  if (university.id !== 'nycu') return [university];
+  return [
+    { ...university, name: '國立陽明交通大學（交大校區）', shortName: '交大校區' },
+    {
+      id: 'nycu-yangming',
+      name: '國立陽明交通大學（陽明校區）',
+      shortName: '陽明校區',
+      city: '臺北市',
+      district: '北投區',
+      latitude: 25.1196737,
+      longitude: 121.5133204,
+      address: '臺北市北投區立農街二段155號',
+    },
+  ];
+});

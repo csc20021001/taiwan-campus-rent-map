@@ -6,7 +6,7 @@ import { BarChart3, ChevronDown, CircleDollarSign, LocateFixed, LogIn, LogOut, M
 import type { Map as MapLibreMap, MapMouseEvent, Marker as MapLibreMarker } from 'maplibre-gl';
 import { AdSenseSlot } from './adsense';
 import { createCampusMapStyle, DEFAULT_VECTOR_TILE_URL } from './campus-map-style.mjs';
-import { universities } from './data';
+import { rentalCampuses as universities } from './data';
 import { absoluteLngLat, boundsForLocations } from './map-geometry.mjs';
 
 type AuthUser = { id: string; email: string; name: string; avatarUrl: string | null };

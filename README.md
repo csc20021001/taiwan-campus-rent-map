@@ -4,17 +4,18 @@
 
 ## MVP 功能
 
-- 11 所學校：臺大、清大、陽明交大、成大、中央、中興、中山、中正、臺科、北科、宜大
-- 首頁先選擇「查房子」或「查教授」，租屋地圖位於 `/rentals`
+- 11 所學校：臺大、清大、陽明交大、成大、中央、中興、中山、中正、臺科、北科、宜大；租屋地圖另把陽明交大拆成陽明校區與交大校區
+- 首頁先選擇「查房子」或「查教授」，閱讀並同意對應使用提醒後才會前往功能頁；租屋地圖位於 `/rentals`
 - MapLibre GL JS + OpenStreetMap／OpenFreeMap 極簡向量底圖，不需要商業地圖 API 金鑰
 - Marker、地址、租金與評分全部由 Cloudflare D1 提供
-- 52 個政府資料去重後地點、55 筆學校關聯，以及 1 個管理員建立的宜蘭地點
+- 52 個政府歷史資料去重後地點、3 個教育部雲端租屋生活網目前待租地點、58 筆政府地點學校關聯，以及 1 個管理員建立的宜蘭地點
 - 政府歷史租賃參考與有效使用者回報不分來源，合併計算平均租金；評分亦取所有有效回報平均
 - Google OpenID Connect、PKCE、HttpOnly 工作階段
 - 同帳號對同一租屋地點或教授只保留一筆評分，重新送出採 UPSERT
 - 租屋地點評論可公開閱讀；使用 Google 登入後可發表 4～500 字評論
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
-- 老師姓名遮罩顯示；可依「老師態度、學習收穫、作業量、考試難易、給分標準」五項給予 1～5 分評分
+- 老師姓名遮罩顯示且前端不提供外部師資連結；同校同名老師跨系所／學程合併為一筆，系所名稱以「／」並列並共用評分
+- 可依「老師態度、學習收穫、作業量、考試難易、給分標準」五項給予 1～5 分評分
 - AdSense 版位、隱私權政策、服務條款與 `ads.txt`
 
 ## Cloudflare 架構
@@ -40,7 +41,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `users`：內部使用者、唯一 `google_sub`；Email 不公開
 - `auth_sessions`：工作階段 token 的 SHA-256 雜湊
 - `academic_departments`：11 校公開官方網站所列系所、研究所與學位單位
-- `professors`、`professor_ratings`：老師基本資料與唯一 `(user_id, professor_id)` 五項評分
+- `professors`、`professor_ratings`：同校同名老師只有一個身分，跨系所名稱以「／」合併，並使用唯一 `(user_id, professor_id)` 五項評分
 - `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
 - `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
 - `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
@@ -110,6 +111,8 @@ npm run dev
 - `drizzle/0008_academic_units_and_rating_dimensions.sql`：新增官方系所資料表與四項老師評分欄位
 - `drizzle/0009_rental_comments.sql`：新增公開租屋評論、內容長度限制與查詢 indexes
 - `drizzle/0010_professor_learning_score.sql`：新增「學習收穫」評分欄位與 1～5 分限制
+- `drizzle/0011_unify_professor_identities.sql`：合併同校同名老師、保留每位使用者最新一筆評分並改為單一老師身分
+- `drizzle/0012_nycu_campuses_and_current_rentals.sql`：新增陽明校區與教育部雲端租屋生活網目前待租地點
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 - `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域
@@ -145,7 +148,7 @@ npx wrangler d1 migrations apply <DATABASE_NAME> --remote
 ]
 ```
 
-目前收錄 11 校、777 個去重後官方學術單位，以及 3,365 筆官方公開師資資料，涵蓋 226 個具有可核對公開師資名單的系所／學程。所有學術單位都可在篩選器查看；老師姓名必須能在校方公開師資頁以職稱或專任師資區段核對後才會顯示，論壇、搜尋結果摘要及第三方名錄不會被匯入。
+目前收錄 11 校、777 個去重後官方學術單位，以及 3,365 筆官方公開師資來源紀錄；跨系所同名者合併後為 2,923 個老師身分，涵蓋 226 個具有可核對公開師資名單的系所／學程。所有學術單位都可在篩選器查看；老師姓名必須能在校方公開師資頁以職稱或專任師資區段核對後才會匯入，論壇、搜尋結果摘要及第三方名錄不會被採用，官方來源只保留在後端核對，不顯示為前端外部連結。
 
 ## 品質檢查
 
@@ -157,8 +160,8 @@ npm run build
 npm audit
 ```
 
-Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 個不重複地點、56 筆學校關聯、唯一評分／回報限制、公開評論限制，以及政府參考與有效使用者回報的跨來源平均計算。
+Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認歷史地點、教育部目前待租地點、陽明／交大兩校區、教授身分合併、唯一評分／回報限制、公開評論限制，以及政府參考與有效使用者回報的跨來源平均計算。租屋清單以 `created_at DESC` 排序，因此使用者新建與最新政府地點會固定出現在較舊資料之前。
 
 ## 地圖授權
 
-畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；所有 Marker 根節點維持 `position:absolute`，選取狀態只改外框與陰影，不覆寫 MapLibre 的定位 `transform`。租屋資料不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。
+畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；所有 Marker 根節點維持 `position:absolute`，選取狀態只改外框與陰影，不覆寫 MapLibre 的定位 `transform`。租屋內容只匯入政府官方公開資料；不從 OSM POI 推論，也不爬取 Google Maps、591、樂屋或其他商業租屋平台。OSM 僅用於底圖與無門牌節點時的固定街道中心座標，並保留「未驗證」狀態。

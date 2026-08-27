@@ -6,7 +6,6 @@ export type ProfessorView = {
   universityId: string;
   department: string;
   name: string;
-  officialSourceUrl: string;
   averageRating: number | null;
   averageAttitude: number | null;
   averageLearning: number | null;
@@ -21,7 +20,6 @@ type ProfessorRow = {
   university_id: string;
   department: string;
   name: string;
-  official_source_url: string;
   average_rating: number | null;
   average_attitude: number | null;
   average_learning: number | null;
@@ -39,7 +37,6 @@ function mapProfessor(row: ProfessorRow): ProfessorView {
     universityId: row.university_id,
     department: row.department,
     name: maskProfessorName(row.name),
-    officialSourceUrl: row.official_source_url,
     averageRating: numericOrNull(row.average_rating),
     averageAttitude: numericOrNull(row.average_attitude),
     averageLearning: numericOrNull(row.average_learning),
@@ -67,7 +64,7 @@ export async function listProfessors(filters: { universityId?: string; departmen
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await getD1().prepare(`
-    SELECT p.id, p.university_id, p.department, p.name, p.official_source_url,
+    SELECT p.id, p.university_id, p.department, p.name,
       ROUND(AVG((pr.attitude_score + pr.learning_score + pr.workload_score + pr.exam_difficulty_score + pr.grading_standard_score) / 5.0), 1) AS average_rating,
       ROUND(AVG(pr.attitude_score), 1) AS average_attitude,
       ROUND(AVG(pr.learning_score), 1) AS average_learning,
@@ -87,7 +84,7 @@ export async function listProfessors(filters: { universityId?: string; departmen
 
 export async function getProfessor(id: string) {
   const row = await getD1().prepare(`
-    SELECT p.id, p.university_id, p.department, p.name, p.official_source_url,
+    SELECT p.id, p.university_id, p.department, p.name,
       ROUND(AVG((pr.attitude_score + pr.learning_score + pr.workload_score + pr.exam_difficulty_score + pr.grading_standard_score) / 5.0), 1) AS average_rating,
       ROUND(AVG(pr.attitude_score), 1) AS average_attitude,
       ROUND(AVG(pr.learning_score), 1) AS average_learning,

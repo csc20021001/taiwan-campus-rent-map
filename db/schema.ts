@@ -96,7 +96,7 @@ export const professors = sqliteTable('professors', {
   index('idx_professors_university').on(table.universityId),
   index('idx_professors_department').on(table.department),
   index('idx_professors_name').on(table.name),
-  uniqueIndex('idx_professors_identity').on(table.universityId, table.department, table.name),
+  uniqueIndex('idx_professors_identity').on(table.universityId, table.name),
 ]);
 
 export const professorRatings = sqliteTable('professor_ratings', {

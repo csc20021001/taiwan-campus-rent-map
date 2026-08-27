@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { departmentSeeds } from '../db/department-seeds.ts';
+import { professorSeeds } from '../db/professors-seeds.generated.ts';
 
 const seeds = JSON.parse(
   readFileSync(new URL('../db/professors.seed.json', import.meta.url), 'utf8'),
@@ -63,6 +64,22 @@ test('professor seed contains only unique official university records', () => {
   }
 });
 
+test('generated professor seeds unify one person across departments', () => {
+  assert.equal(
+    new Set(professorSeeds.map((row) => `${row.universityId}\u0000${row.name}`)).size,
+    professorSeeds.length,
+  );
+  assert.ok(professorSeeds.some((row) => row.department.includes('／')));
+  for (const row of professorSeeds) {
+    for (const department of row.department.split('／')) {
+      assert.ok(
+        departmentIdentities.has(`${row.universityId}\u0000${department}`),
+        `${row.universityId}/${department} must exist in the academic unit directory`,
+      );
+    }
+  }
+});
+
 test('generated professor SQL imports all official-source records', () => {
   const database = new DatabaseSync(':memory:');
   database.exec(`
@@ -79,12 +96,12 @@ test('generated professor SQL imports all official-source records', () => {
       official_source_url TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE (university_id, department, name)
+      UNIQUE (university_id, name)
     );
   `);
   database.exec(generatedSql);
 
-  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM professors').get().count, seeds.length);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM professors').get().count, professorSeeds.length);
   assert.equal(
     database.prepare("SELECT COUNT(*) AS count FROM professors WHERE official_source_url = ''").get().count,
     0,
