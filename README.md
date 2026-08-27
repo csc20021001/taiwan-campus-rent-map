@@ -105,10 +105,16 @@ npm run dev
 - `drizzle/0008_academic_units_and_rating_dimensions.sql`：新增官方系所資料表與四項老師評分欄位
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
+- `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域
+- `db/nycu-official-units.generated.json`：由陽明交大官方「115 年網站健檢受檢單位清單」整理的系所網址
 - `db/department-seeds.ts`：收錄 11 校官方學術單位頁所列系所、研究所、學位學程與教學單位
 
 ```bash
 npm run seed:build
+npm run professors:discover
+npm run professors:faculty-pages
+npm run professors:extract
+npm run professors:merge
 ```
 
 Sites 部署會把 `drizzle/` 一併打包並依 journal 套用 D1 migration。若使用自己的 Cloudflare 帳號與 Wrangler，先建立 D1、設定 `DB` binding，然後執行：
@@ -132,7 +138,7 @@ npx wrangler d1 migrations apply <DATABASE_NAME> --remote
 ]
 ```
 
-目前收錄 11 校、777 個去重後官方學術單位，以及 167 筆官方公開師資資料。所有系所都可在篩選器查看；老師姓名必須能在校方公開師資頁核對後才會顯示，論壇及第三方名錄不會被匯入。
+目前收錄 11 校、777 個去重後官方學術單位，以及 3,365 筆官方公開師資資料，涵蓋 220 個具有可解析公開師資名單的系所／學程。所有學術單位都可在篩選器查看；老師姓名必須能在校方公開師資頁以職稱或專任師資區段核對後才會顯示，論壇、搜尋結果摘要及第三方名錄不會被匯入。
 
 ## 品質檢查
 
@@ -148,4 +154,4 @@ Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認 53 
 
 ## 地圖授權
 
-畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；未確認的近似座標會明確標示。租屋資料不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。
+畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；選取狀態只改外框與陰影，不覆寫 MapLibre 用於經緯度定位的 `transform`。未確認的近似座標會明確標示。租屋資料不從 OSM POI 推論，也不爬取 Google Maps、591 或其他商業租屋平台。

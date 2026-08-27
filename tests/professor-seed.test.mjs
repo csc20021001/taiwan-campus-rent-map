@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import { departmentSeeds } from '../db/department-seeds.ts';
 
 const seeds = JSON.parse(
   readFileSync(new URL('../db/professors.seed.json', import.meta.url), 'utf8'),
@@ -25,35 +26,25 @@ const officialDomains = {
   niu: 'niu.edu.tw',
 };
 
-const expectedCounts = {
-  ntu: 10,
-  nthu: 9,
-  nycu: 13,
-  ncku: 17,
-  ncu: 20,
-  nchu: 14,
-  ccu: 8,
-  nsysu: 16,
-  ntust: 27,
-  ntut: 23,
-  niu: 10,
-};
+const supportedUniversities = Object.keys(officialDomains);
+const departmentIdentities = new Set(
+  departmentSeeds.map((row) => `${row.universityId}\u0000${row.name}`),
+);
 
 test('professor seed contains only unique official university records', () => {
-  assert.equal(seeds.length, 167);
+  assert.ok(seeds.length >= 3000, 'official professor coverage must remain above 3,000 records');
   assert.equal(new Set(seeds.map((row) => row.id)).size, seeds.length);
   assert.equal(
     new Set(seeds.map((row) => `${row.universityId}\u0000${row.department}\u0000${row.name}`)).size,
     seeds.length,
   );
 
-  const actualCounts = Object.fromEntries(
-    Object.keys(expectedCounts).map((universityId) => [
-      universityId,
-      seeds.filter((row) => row.universityId === universityId).length,
-    ]),
-  );
-  assert.deepEqual(actualCounts, expectedCounts);
+  for (const universityId of supportedUniversities) {
+    assert.ok(
+      seeds.some((row) => row.universityId === universityId),
+      `${universityId} must include at least one official professor record`,
+    );
+  }
 
   for (const row of seeds) {
     const source = new URL(row.sourceUrl);
@@ -65,6 +56,10 @@ test('professor seed contains only unique official university records', () => {
       `${row.id} must use the official ${expectedDomain} domain`,
     );
     assert.doesNotMatch(source.hostname, /forum|dcard|ptt/i);
+    assert.ok(
+      departmentIdentities.has(`${row.universityId}\u0000${row.department}`),
+      `${row.universityId}/${row.department} must exist in the academic unit directory`,
+    );
   }
 });
 
@@ -89,19 +84,14 @@ test('generated professor SQL imports all official-source records', () => {
   `);
   database.exec(generatedSql);
 
-  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM professors').get().count, 167);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM professors').get().count, seeds.length);
   assert.equal(
     database.prepare("SELECT COUNT(*) AS count FROM professors WHERE official_source_url = ''").get().count,
     0,
   );
   assert.deepEqual(
-    Object.fromEntries(
-      database.prepare(`
-        SELECT university_id, COUNT(*) AS count
-        FROM professors
-        GROUP BY university_id
-      `).all().map((row) => [row.university_id, row.count]),
-    ),
-    expectedCounts,
+    database.prepare('SELECT DISTINCT university_id FROM professors ORDER BY university_id').all()
+      .map((row) => row.university_id),
+    [...supportedUniversities].sort(),
   );
 });

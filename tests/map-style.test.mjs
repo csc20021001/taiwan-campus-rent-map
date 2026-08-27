@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createCampusMapStyle, DEFAULT_VECTOR_TILE_URL } from '../app/campus-map-style.mjs';
 
 const rentalExplorer = readFileSync(new URL('../app/rental-explorer.tsx', import.meta.url), 'utf8');
+const globalStyles = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
 
 test('campus map uses the hosted OpenFreeMap vector source', () => {
   const style = createCampusMapStyle();
@@ -30,4 +31,10 @@ test('map markers use exact subpixel positioning and source-only copy stays hidd
   assert.doesNotMatch(rentalExplorer, /住過的人回報/);
   assert.doesNotMatch(rentalExplorer, /政府歷史租賃參考/);
   assert.doesNotMatch(rentalExplorer, /這筆資料已納入上方平均租金/);
+});
+
+test('selected rental marker styling never overwrites MapLibre positioning', () => {
+  const selectedRule = globalStyles.match(/\.rent-marker\.is-selected\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.ok(selectedRule.length > 0);
+  assert.doesNotMatch(selectedRule, /(?:^|;)\s*transform\s*:/);
 });

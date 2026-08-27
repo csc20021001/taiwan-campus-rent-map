@@ -111,7 +111,7 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline:3px solid 
 .rent-marker span { position:relative; z-index:1; white-space:nowrap; }
 .rent-marker-price { font-size:11px; font-weight:900; }
 .rent-marker-rating { color:#c97916; font-size:9px; font-weight:850; }
-.rent-marker.is-selected { color:white; background:var(--orange); transform:scale(1.08); }
+.rent-marker.is-selected { color:white; background:var(--orange); box-shadow:0 0 0 3px rgba(242,107,58,.24),0 6px 18px rgba(31,50,44,.25); }
 .rent-marker.is-selected .rent-marker-rating { color:white; }
 .draft-marker { position:relative; min-width:88px; padding:8px 10px; color:#8c4b31; background:#fff4eb; border:2px dashed var(--orange); border-radius:10px; box-shadow:0 6px 18px rgba(62,44,35,.2); font-size:9px; font-weight:850; text-align:center; }
 .draft-marker.is-confirmed { color:white; background:var(--orange); border-style:solid; }
