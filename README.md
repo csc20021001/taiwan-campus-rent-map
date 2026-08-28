@@ -119,6 +119,7 @@ npm run dev
 - `drizzle/0013_courses_and_course_ratings.sql`：新增課程、授課教師與不含教師態度的四項課程評分
 - `drizzle/0014_course_history_terms.sql`：新增首次、最近與完整開課學期欄位
 - `drizzle/0015_*.sql`～`0020_*.sql`：部署時分段匯入校方官方歷史課程，避免 API 首次請求執行大量 seed，並讓每個來源檔保持在部署平台限制內
+- `drizzle/0021_runtime_seed_versions.sql`：標記已匯入的系所、教師與租屋 seed；Worker 冷啟動只做一次輕量檢查，不重複寫入數千筆資料
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 - `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域

@@ -146,6 +146,24 @@ async function runBatches(statements: D1PreparedStatement[], size = 80) {
   }
 }
 
+async function runVersionedSeed(options: {
+  name: string;
+  version: string;
+  table: string;
+  run: () => Promise<void>;
+}) {
+  const db = getD1();
+  const marker = await db.prepare('SELECT version FROM app_seed_versions WHERE seed_name = ?')
+    .bind(options.name).first<{ version: string }>();
+  const count = await db.prepare(`SELECT COUNT(*) AS count FROM ${options.table}`).first<{ count: number }>();
+  if (marker?.version === options.version && Number(count?.count ?? 0) > 0) return;
+  await options.run();
+  await db.prepare(`INSERT INTO app_seed_versions (seed_name, version, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(seed_name) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at`)
+    .bind(options.name, options.version).run();
+}
+
 async function initializeCoreTables() {
   const db = getD1();
   await db.batch([
@@ -268,6 +286,11 @@ async function initializeCoreTables() {
       request_count INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, action, window_started_at)
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS app_seed_versions (
+      seed_name TEXT PRIMARY KEY NOT NULL,
+      version TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     )`),
   ]);
   await ensureProfessorOfficialSourceUrl();
@@ -518,9 +541,9 @@ async function initializeDatabase() {
   await db.batch(schoolSeeds);
 
   await initializeCoreTables();
-  await seedDepartments();
-  await seedProfessors();
-  await seedRentalLocations();
+  await runVersionedSeed({ name: 'departments', version: '2026-08-27-v1', table: 'academic_departments', run: seedDepartments });
+  await runVersionedSeed({ name: 'professors', version: '2026-08-27-v1', table: 'professors', run: seedProfessors });
+  await runVersionedSeed({ name: 'rentals', version: '2026-08-27-v2', table: 'rental_locations', run: seedRentalLocations });
   await db.prepare('PRAGMA optimize').run();
 }
 
