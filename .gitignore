@@ -42,6 +42,7 @@ next-env.d.ts
 /db/professors-seed.generated.sql
 /db/course-seeds.generated.ts
 /.course-cache/
+/.four-school-course-cache/
 /.research/
 __pycache__/
 *.pyc
