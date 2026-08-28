@@ -14,6 +14,7 @@ const sampleListingIds = [
 ];
 
 let databaseReady: Promise<void> | null = null;
+const runtimeSchemaVersion = '2026-08-28-v1';
 
 export function getD1() {
   if (!env.DB) throw new Error('Cloudflare D1 binding `DB` is unavailable.');
@@ -22,6 +23,33 @@ export function getD1() {
 
 export function getDb() {
   return drizzle(getD1(), { schema });
+}
+
+async function isRuntimeSchemaReady() {
+  try {
+    const state = await getD1().prepare(`SELECT value,
+      (SELECT COUNT(*) FROM universities) AS university_count,
+      (SELECT COUNT(*) FROM academic_departments) AS department_count,
+      (SELECT COUNT(*) FROM professors) AS professor_count,
+      (SELECT COUNT(*) FROM courses) AS course_count,
+      (SELECT COUNT(*) FROM rental_locations) AS rental_count
+      FROM app_runtime_state WHERE key = 'schema_version'`).first<{
+        value: string;
+        university_count: number;
+        department_count: number;
+        professor_count: number;
+        course_count: number;
+        rental_count: number;
+      }>();
+    return state?.value === runtimeSchemaVersion
+      && Number(state.university_count) > 0
+      && Number(state.department_count) > 0
+      && Number(state.professor_count) > 0
+      && Number(state.course_count) > 0
+      && Number(state.rental_count) > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function migrateLegacyListings() {
@@ -448,6 +476,7 @@ async function seedRentalLocations() {
 }
 
 async function initializeDatabase() {
+  if (await isRuntimeSchemaReady()) return;
   const db = getD1();
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS universities (
@@ -544,6 +573,15 @@ async function initializeDatabase() {
   await runVersionedSeed({ name: 'departments', version: '2026-08-27-v1', table: 'academic_departments', run: seedDepartments });
   await runVersionedSeed({ name: 'professors', version: '2026-08-27-v1', table: 'professors', run: seedProfessors });
   await runVersionedSeed({ name: 'rentals', version: '2026-08-27-v2', table: 'rental_locations', run: seedRentalLocations });
+  await db.prepare(`CREATE TABLE IF NOT EXISTS app_runtime_state (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`).run();
+  await db.prepare(`INSERT INTO app_runtime_state (key, value, updated_at)
+    VALUES ('schema_version', ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .bind(runtimeSchemaVersion).run();
   await db.prepare('PRAGMA optimize').run();
 }
 
