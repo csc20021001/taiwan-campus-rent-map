@@ -124,11 +124,14 @@ export const courses = sqliteTable('courses', {
   firstTerm: text('first_term').notNull().default(''),
   lastTerm: text('last_term').notNull().default(''),
   offeredTerms: text('offered_terms').notNull().default(''),
+  semester: text('semester').notNull().default(''),
   courseCode: text('course_code').notNull(),
   name: text('name').notNull(),
   department: text('department').notNull(),
   officialSourceUrl: text('official_source_url').notNull(),
   departmentSourceUrl: text('department_source_url').notNull().default(''),
+  sourceType: text('source_type').notNull().default('official'),
+  submittedByUserId: text('submitted_by_user_id'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
@@ -153,6 +156,7 @@ export const courseInstructors = sqliteTable('course_instructors', {
 export const courseRatings = sqliteTable('course_ratings', {
   id: text('id').primaryKey(),
   courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  instructorName: text('instructor_name').notNull(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   learningScore: integer('learning_score').notNull(),
   workloadScore: integer('workload_score').notNull(),
@@ -163,7 +167,7 @@ export const courseRatings = sqliteTable('course_ratings', {
 }, (table) => [
   index('idx_course_ratings_course').on(table.courseId),
   index('idx_course_ratings_user').on(table.userId),
-  uniqueIndex('idx_course_ratings_user_course').on(table.userId, table.courseId),
+  uniqueIndex('idx_course_ratings_user_course_instructor').on(table.userId, table.courseId, table.instructorName),
 ]);
 
 export const rentalLocations = sqliteTable('rental_locations', {

@@ -9,12 +9,13 @@ import { departmentSeeds } from './department-seeds';
 import { currentGovernmentRentalSeeds } from './current-government-rental-seeds';
 
 const sampleListingIds = [
-  'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
+  'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncu-01',
   'nchu-01', 'ccu-01', 'nsysu-01', 'ntust-01', 'ntut-01', 'niu-01',
 ];
+const activeUniversityIds = new Set(rentalCampuses.map((school) => school.id));
 
 let databaseReady: Promise<void> | null = null;
-const runtimeSchemaVersion = '2026-08-28-v1';
+const runtimeSchemaVersion = '2026-08-28-v2';
 
 export function getD1() {
   if (!env.DB) throw new Error('Cloudflare D1 binding `DB` is unavailable.');
@@ -106,10 +107,20 @@ async function ensureCourseHistoryColumns() {
     ['first_term', "ALTER TABLE courses ADD COLUMN first_term TEXT NOT NULL DEFAULT ''"],
     ['last_term', "ALTER TABLE courses ADD COLUMN last_term TEXT NOT NULL DEFAULT ''"],
     ['offered_terms', "ALTER TABLE courses ADD COLUMN offered_terms TEXT NOT NULL DEFAULT ''"],
+    ['semester', "ALTER TABLE courses ADD COLUMN semester TEXT NOT NULL DEFAULT ''"],
+    ['source_type', "ALTER TABLE courses ADD COLUMN source_type TEXT NOT NULL DEFAULT 'official'"],
+    ['submitted_by_user_id', 'ALTER TABLE courses ADD COLUMN submitted_by_user_id TEXT'],
   ] as const;
   for (const [column, sql] of additions) {
     if (!existing.has(column)) await db.prepare(sql).run();
   }
+  await db.batch([
+    db.prepare(`UPDATE courses SET semester = CASE
+      WHEN term LIKE '%-1' THEN '1' WHEN term LIKE '%-2' THEN '2' ELSE semester END
+      WHERE semester = ''`),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_identity ON courses(university_id, term, course_code)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_university_semester ON courses(university_id, semester, department, name)'),
+  ]);
 }
 
 async function ensureUnifiedProfessorIdentities() {
@@ -235,11 +246,14 @@ async function initializeCoreTables() {
       first_term TEXT NOT NULL DEFAULT '',
       last_term TEXT NOT NULL DEFAULT '',
       offered_terms TEXT NOT NULL DEFAULT '',
+      semester TEXT NOT NULL DEFAULT '',
       course_code TEXT NOT NULL,
       name TEXT NOT NULL,
       department TEXT NOT NULL,
       official_source_url TEXT NOT NULL,
       department_source_url TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'official',
+      submitted_by_user_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE (university_id, term, course_code)
@@ -255,6 +269,7 @@ async function initializeCoreTables() {
     db.prepare(`CREATE TABLE IF NOT EXISTS course_ratings (
       id TEXT PRIMARY KEY NOT NULL,
       course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      instructor_name TEXT NOT NULL,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       learning_score INTEGER NOT NULL CHECK (learning_score BETWEEN 1 AND 5),
       workload_score INTEGER NOT NULL CHECK (workload_score BETWEEN 1 AND 5),
@@ -262,7 +277,7 @@ async function initializeCoreTables() {
       grading_standard_score INTEGER NOT NULL CHECK (grading_standard_score BETWEEN 1 AND 5),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE (user_id, course_id)
+      UNIQUE (user_id, course_id, instructor_name)
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS rental_locations (
       id TEXT PRIMARY KEY NOT NULL,
@@ -341,7 +356,7 @@ async function initializeCoreTables() {
     db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_department ON courses(department)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_course_instructors_name ON course_instructors(instructor_name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_course_instructors_professor ON course_instructors(professor_id)'),
-    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_course_ratings_user_course ON course_ratings(user_id, course_id)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_course_ratings_user_course_instructor ON course_ratings(user_id, course_id, instructor_name)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_course_ratings_course ON course_ratings(course_id)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_course_ratings_user ON course_ratings(user_id)'),
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_rental_locations_normalized_address ON rental_locations(normalized_address)'),
@@ -361,7 +376,7 @@ async function initializeCoreTables() {
 async function seedDepartments() {
   const db = getD1();
   const timestamp = '2026-08-27T00:00:00.000Z';
-  const statements = departmentSeeds.map((seed) => db.prepare(`
+  const statements = departmentSeeds.filter((seed) => activeUniversityIds.has(seed.universityId)).map((seed) => db.prepare(`
     INSERT INTO academic_departments (
       id, university_id, college, name, unit_type, official_source_url, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -380,7 +395,7 @@ async function seedDepartments() {
 async function seedProfessors() {
   const db = getD1();
   const timestamp = '2026-08-27T00:00:00.000Z';
-  const statements = professorSeeds.map((seed) => db.prepare(`
+  const statements = professorSeeds.filter((seed) => activeUniversityIds.has(seed.universityId)).map((seed) => db.prepare(`
     INSERT INTO professors (
       id, university_id, department, name, official_source_url, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -395,7 +410,8 @@ async function seedProfessors() {
 async function seedRentalLocations() {
   const db = getD1();
   const timestamp = '2026-08-26T00:00:00.000Z';
-  const locationSeeds = rentalSeeds.map((seed) => {
+  const activeRentalSeeds = rentalSeeds.filter((seed) => activeUniversityIds.has(seed.primaryUniversityId));
+  const locationSeeds = activeRentalSeeds.map((seed) => {
     const coordinate = fixedAbsoluteCoordinate(seed.normalizedAddress) ?? seed;
     return db.prepare(`
     INSERT INTO rental_locations (
@@ -423,7 +439,9 @@ async function seedRentalLocations() {
   });
   await runBatches(locationSeeds);
 
-  const associationSeeds = rentalSeeds.flatMap((seed) => seed.universityIds.map((universityId) => db.prepare(`
+  const associationSeeds = activeRentalSeeds.flatMap((seed) => seed.universityIds
+    .filter((universityId) => activeUniversityIds.has(universityId))
+    .map((universityId) => db.prepare(`
     INSERT INTO rental_location_universities (rental_location_id, university_id, created_at)
     SELECT id, ?, ? FROM rental_locations WHERE normalized_address = ?
     ON CONFLICT(rental_location_id, university_id) DO NOTHING
@@ -446,7 +464,9 @@ async function seedRentalLocations() {
       ON CONFLICT(rental_location_id, university_id) DO NOTHING`).bind(timestamp),
   ]);
 
-  const currentLocationStatements = currentGovernmentRentalSeeds.flatMap((seed) => [
+  const currentLocationStatements = currentGovernmentRentalSeeds
+    .filter((seed) => activeUniversityIds.has(seed.universityId))
+    .flatMap((seed) => [
     db.prepare(`INSERT INTO rental_locations (
       id, university_id, address, normalized_address, latitude, longitude, source,
       reference_rent, reference_rent_source, coordinate_source, coordinates_verified,
@@ -473,6 +493,26 @@ async function seedRentalLocations() {
       .bind(seed.universityId, seed.createdAt, seed.normalizedAddress),
   ]);
   await runBatches(currentLocationStatements);
+}
+
+async function purgeRemovedUniversityData() {
+  const db = getD1();
+  const universityId = 'ncku';
+  await db.batch([
+    db.prepare('DELETE FROM reviews WHERE listing_id IN (SELECT id FROM listings WHERE university_id = ?)').bind(universityId),
+    db.prepare('DELETE FROM listings WHERE university_id = ?').bind(universityId),
+    db.prepare('DELETE FROM rental_comments WHERE rental_location_id IN (SELECT id FROM rental_locations WHERE university_id = ?)').bind(universityId),
+    db.prepare('DELETE FROM rental_reports WHERE rental_location_id IN (SELECT id FROM rental_locations WHERE university_id = ?)').bind(universityId),
+    db.prepare('DELETE FROM rental_location_universities WHERE university_id = ?').bind(universityId),
+    db.prepare('DELETE FROM rental_locations WHERE university_id = ?').bind(universityId),
+    db.prepare('DELETE FROM course_ratings WHERE course_id IN (SELECT id FROM courses WHERE university_id = ?)').bind(universityId),
+    db.prepare('DELETE FROM course_instructors WHERE course_id IN (SELECT id FROM courses WHERE university_id = ?)').bind(universityId),
+    db.prepare('DELETE FROM courses WHERE university_id = ?').bind(universityId),
+    db.prepare('DELETE FROM professor_ratings WHERE professor_id IN (SELECT id FROM professors WHERE university_id = ?)').bind(universityId),
+    db.prepare('DELETE FROM professors WHERE university_id = ?').bind(universityId),
+    db.prepare('DELETE FROM academic_departments WHERE university_id = ?').bind(universityId),
+    db.prepare('DELETE FROM universities WHERE id = ?').bind(universityId),
+  ]);
 }
 
 async function initializeDatabase() {
@@ -570,6 +610,7 @@ async function initializeDatabase() {
   await db.batch(schoolSeeds);
 
   await initializeCoreTables();
+  await purgeRemovedUniversityData();
   await runVersionedSeed({ name: 'departments', version: '2026-08-27-v1', table: 'academic_departments', run: seedDepartments });
   await runVersionedSeed({ name: 'professors', version: '2026-08-27-v1', table: 'professors', run: seedProfessors });
   await runVersionedSeed({ name: 'rentals', version: '2026-08-27-v2', table: 'rental_locations', run: seedRentalLocations });

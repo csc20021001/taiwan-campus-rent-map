@@ -4,13 +4,13 @@ import { departmentSeeds } from '../db/department-seeds.ts';
 
 const officialDomains = new Map([
   ['ntu', 'ntu.edu.tw'], ['nthu', 'nthu.edu.tw'], ['nycu', 'nycu.edu.tw'],
-  ['ncku', 'ncku.edu.tw'], ['ncu', 'ncu.edu.tw'], ['nchu', 'nchu.edu.tw'],
+  ['ncu', 'ncu.edu.tw'], ['nchu', 'nchu.edu.tw'],
   ['ccu', 'ccu.edu.tw'], ['nsysu', 'nsysu.edu.tw'], ['ntust', 'ntust.edu.tw'],
   ['ntut', 'ntut.edu.tw'], ['niu', 'niu.edu.tw'],
 ]);
 
-test('all 11 schools have unique official academic unit seeds', () => {
-  assert.ok(departmentSeeds.length >= 700);
+test('all supported schools have unique official academic unit seeds', () => {
+  assert.ok(departmentSeeds.length >= 650);
   const identities = new Set();
   const counts = new Map();
   for (const row of departmentSeeds) {
@@ -26,6 +26,6 @@ test('all 11 schools have unique official academic unit seeds', () => {
     assert.equal(source.protocol, 'https:');
     assert.ok(domain && (source.hostname === domain || source.hostname.endsWith(`.${domain}`)));
   }
-  assert.equal(counts.size, 11);
+  assert.equal(counts.size, 10);
   for (const schoolId of officialDomains.keys()) assert.ok((counts.get(schoolId) ?? 0) >= 20, schoolId);
 });

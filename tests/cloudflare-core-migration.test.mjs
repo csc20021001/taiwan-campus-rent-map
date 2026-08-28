@@ -13,6 +13,7 @@ const professorLearningMigration = readFileSync(new URL('../drizzle/0010_profess
 const unifiedProfessorMigration = readFileSync(new URL('../drizzle/0011_unify_professor_identities.sql', import.meta.url), 'utf8');
 const currentRentalMigration = readFileSync(new URL('../drizzle/0012_nycu_campuses_and_current_rentals.sql', import.meta.url), 'utf8');
 const courseMigration = readFileSync(new URL('../drizzle/0013_courses_and_course_ratings.sql', import.meta.url), 'utf8');
+const removedUniversityMigration = readFileSync(new URL('../drizzle/0023_replace_ncku_with_private_universities.sql', import.meta.url), 'utf8');
 
 function apply(database, sql) {
   for (const statement of sql.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean)) {
@@ -160,8 +161,8 @@ test('same university professor shares one identity and one rating across units'
 test('government seed is de-duplicated and associated with all supplied schools', () => {
   const database = databaseWithCore();
   apply(database, seedMigration);
-  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_locations').get().count, 53);
-  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_location_universities').get().count, 56);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_locations').get().count, 48);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rental_location_universities').get().count, 51);
   const shared = database.prepare(`SELECT COUNT(*) AS count
     FROM rental_location_universities lu JOIN rental_locations l ON l.id = lu.rental_location_id
     WHERE l.normalized_address = '新竹市世傑路288號'`).get();
@@ -179,6 +180,61 @@ test('current government listings and both NYCU campuses migrate', () => {
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM rental_locations WHERE id LIKE 'moe-current-%'").get().count, 3);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM rental_locations WHERE id LIKE 'moe-current-%' AND source = 'government'").get().count, 3);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM rental_locations WHERE id LIKE 'moe-current-%' AND reference_rent_source LIKE '教育部雲端租屋生活網%'").get().count, 3);
+});
+
+test('removed university migration deletes every linked record', () => {
+  const database = databaseWithCore();
+  apply(database, courseMigration);
+  database.exec(`
+    CREATE TABLE listings (id TEXT PRIMARY KEY NOT NULL, university_id TEXT NOT NULL);
+    CREATE TABLE reviews (id TEXT PRIMARY KEY NOT NULL, listing_id TEXT NOT NULL);
+    CREATE TABLE app_runtime_state (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+    INSERT INTO app_runtime_state VALUES ('schema_version', 'old', 'now');
+    INSERT INTO users (id) VALUES ('remove-user');
+    INSERT INTO listings VALUES ('remove-listing', 'ncku');
+    INSERT INTO reviews VALUES ('remove-review', 'remove-listing');
+    INSERT INTO rental_locations
+      (id, university_id, address, normalized_address, source, coordinates_verified, created_at, updated_at)
+    VALUES ('remove-rental', 'ncku', '測試地址', '測試地址', 'government', 0, 'now', 'now');
+    INSERT INTO rental_location_universities VALUES ('remove-rental', 'ncku', 'now');
+    INSERT INTO rental_reports
+      (id, rental_location_id, user_id, monthly_rent, overall_rating, is_valid, is_outlier, created_at, updated_at)
+    VALUES ('remove-report', 'remove-rental', 'remove-user', 5000, 3, 1, 0, 'now', 'now');
+    INSERT INTO rental_comments
+      (id, rental_location_id, user_id, content, created_at, updated_at)
+    VALUES ('remove-comment', 'remove-rental', 'remove-user', '這是測試留言', 'now', 'now');
+    INSERT INTO academic_departments
+      (id, university_id, college, name, unit_type, official_source_url, created_at, updated_at)
+    VALUES ('remove-dept', 'ncku', '測試學院', '測試學系', 'department', 'https://example.invalid/', 'now', 'now');
+    INSERT INTO professors
+      (id, university_id, department, name, official_source_url, created_at, updated_at)
+    VALUES ('remove-professor', 'ncku', '測試學系', '測試教授', 'https://example.invalid/', 'now', 'now');
+    INSERT INTO professor_ratings
+      (id, professor_id, user_id, easy_to_pass_score, attitude_score, learning_score, workload_score,
+       exam_difficulty_score, grading_standard_score, created_at, updated_at)
+    VALUES ('remove-professor-rating', 'remove-professor', 'remove-user', 3, 3, 3, 3, 3, 3, 'now', 'now');
+    INSERT INTO courses
+      (id, university_id, term, course_code, name, department, official_source_url,
+       department_source_url, created_at, updated_at)
+    VALUES ('remove-course', 'ncku', '115-1', 'TEST', '測試課程', '測試學系',
+      'https://example.invalid/', 'https://example.invalid/', 'now', 'now');
+    INSERT INTO course_instructors VALUES ('remove-course', '測試教授', 'remove-professor', 'https://example.invalid/', 'now');
+    INSERT INTO course_ratings
+      (id, course_id, user_id, learning_score, workload_score, exam_difficulty_score,
+       grading_standard_score, created_at, updated_at)
+    VALUES ('remove-course-rating', 'remove-course', 'remove-user', 3, 3, 3, 3, 'now', 'now');
+  `);
+
+  apply(database, removedUniversityMigration);
+
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM universities WHERE id = 'ncku'").get().count, 0);
+  for (const table of ['listings', 'reviews', 'rental_locations', 'rental_location_universities',
+    'rental_reports', 'rental_comments', 'academic_departments', 'professors', 'professor_ratings',
+    'courses', 'course_instructors', 'course_ratings']) {
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count, 0, table);
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM universities WHERE id IN ('cycu', 'tku', 'yzu', 'fcu')").get().count, 4);
+  database.close();
 });
 
 test('fixed absolute migration separates shared street centroids', () => {

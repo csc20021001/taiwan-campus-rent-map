@@ -6,7 +6,7 @@ const report = JSON.parse(readFileSync(new URL('../db/course-import-report.gener
 const importer = readFileSync(new URL('../scripts/import-official-course-history.py', import.meta.url), 'utf8');
 
 test('historical course import is material and records its coverage', () => {
-  assert.equal(report.courseCount, 35511);
+  assert.equal(report.courseCount, 33225);
   assert.equal(report.policy.officialUniversityDomainsOnly, true);
   assert.equal(report.policy.requiresCurrentOfficialFacultyEvidence, true);
   assert.ok(report.courseMigrationFiles.length > 1);

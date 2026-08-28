@@ -22,7 +22,7 @@ test('official course history migration loads the generated snapshot into SQLite
     );
   `);
   const insertUniversity = db.prepare('INSERT INTO universities (id) VALUES (?)');
-  for (const id of ['ntu', 'nthu', 'nycu', 'ncku', 'ncu', 'nchu', 'ccu', 'nsysu', 'ntust', 'ntut', 'niu']) {
+  for (const id of ['ntu', 'nthu', 'nycu', 'ncu', 'nchu', 'ccu', 'nsysu', 'ntust', 'ntut', 'niu']) {
     insertUniversity.run(id);
   }
 
@@ -45,14 +45,14 @@ test('official course history migration loads the generated snapshot into SQLite
   const courses = db.prepare('SELECT university_id, term, official_source_url, department_source_url FROM courses').all();
   const instructors = db.prepare('SELECT c.university_id, ci.instructor_name, ci.official_source_url FROM course_instructors ci JOIN courses c ON c.id = ci.course_id').all();
   const suffixes = {
-    ntu: 'ntu.edu.tw', nthu: 'nthu.edu.tw', nycu: 'nycu.edu.tw', ncku: 'ncku.edu.tw',
+    ntu: 'ntu.edu.tw', nthu: 'nthu.edu.tw', nycu: 'nycu.edu.tw',
     ncu: 'ncu.edu.tw', nchu: 'nchu.edu.tw', ccu: 'ccu.edu.tw', nsysu: 'nsysu.edu.tw',
     ntust: 'ntust.edu.tw', ntut: 'ntut.edu.tw', niu: 'niu.edu.tw',
   };
 
-  assert.equal(courseCount, 35511);
+  assert.equal(courseCount, 33225);
   assert.ok(instructorCount > courseCount);
-  assert.equal(schoolCount, 10);
+  assert.equal(schoolCount, 9);
   assert.equal(range.first, '106-1');
   assert.equal(range.last, '115-1');
   assert.equal(futureCount, 0);

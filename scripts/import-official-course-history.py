@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import html
-import io
-import csv
 import concurrent.futures
 import http.cookiejar
 import json
@@ -40,7 +38,6 @@ ALLOWED_HOST_SUFFIXES = {
     "ntu": ("ntu.edu.tw",),
     "nthu": ("nthu.edu.tw",),
     "ccu": ("ccu.edu.tw",),
-    "ncku": ("ncku.edu.tw",),
     "ncu": ("ncu.edu.tw",),
     "nchu": ("nchu.edu.tw",),
     "nycu": ("nycu.edu.tw",),
@@ -59,20 +56,12 @@ NTHU_SOURCES = (
     ("nthu-1151.json", "https://www.ccxp.nthu.edu.tw/ccxp/INQUIRE/JH/OPENDATA/open_course_data.json"),
 )
 
-NCKU_SOURCES = (
-    ("ncku-1061.csv", "https://data.ncku.edu.tw/storage/f/2018-04-25T07%3A45%3A23.749Z/1061.csv"),
-    ("ncku-1062.csv", "https://data.ncku.edu.tw/storage/f/2018-04-25T07%3A50%3A56.607Z/1062.csv"),
-    ("ncku-1071.csv", "https://data.ncku.edu.tw/storage/f/2019-08-16T02%3A19%3A22.339Z/1071.csv"),
-    ("ncku-1072.csv", "https://data.ncku.edu.tw/storage/f/2019-08-16T02%3A25%3A02.950Z/1072.csv"),
-)
-
 CCU_TERMS = tuple(f"{year}{semester}" for year in range(EARLIEST_YEAR, 115) for semester in (1, 2)) + ("1151",)
 
 COURSE_SOURCE_STATUS = {
     "ntu": {"status": "imported", "officialIndex": "https://nol.ntu.edu.tw/nol/guest/main.php", "note": "校方課程網公開歷史查詢"},
     "nthu": {"status": "imported", "officialIndex": "https://curricul.site.nthu.edu.tw/p/404-1208-111356.php?Lang=zh-tw", "note": "官方下載檔目前涵蓋 108 至 115-1"},
     "nycu": {"status": "restricted", "officialIndex": "https://coz.aa.nycu.edu.tw/", "note": "校方前端使用非校方網域 API；依來源政策未直接取用"},
-    "ncku": {"status": "partial", "officialIndex": "https://data.ncku.edu.tw/dataset/8d6462ee513f1c1a601506265cc9f674", "note": "校方開放資料目前提供 106 至 107；新版查詢另有權杖與分頁限制"},
     "ncu": {"status": "imported", "officialIndex": "https://cis.ncu.edu.tw/Course/main/query/byYears", "note": "官方逐年逐系歷史課表"},
     "nchu": {"status": "pending", "officialIndex": "https://onepiece.nchu.edu.tw/cofsys/plsql/crseqry_home", "note": "官方逐學期表單可用，待完成多學制批次匯入"},
     "ccu": {"status": "imported", "officialIndex": "https://kiki.ccu.edu.tw/~ccmisp06/Course/zipfiles/", "note": "逐學期官方壓縮檔"},
@@ -267,40 +256,6 @@ def parse_nthu(active: dict[str, dict], report: dict) -> list[dict]:
                 "departmentSourceUrl": department_url("nthu", department, active_rows, department_sites),
                 "instructors": active_rows,
             })
-    return parsed
-
-
-def parse_ncku(active: dict[str, dict], report: dict) -> list[dict]:
-    parsed = []
-    department_sites = load_department_sites("ncku")
-    available_terms = []
-    for filename, url in NCKU_SOURCES:
-        path = download(filename, url)
-        text = path.read_bytes().decode("cp950")
-        rows = csv.DictReader(io.StringIO(text))
-        for row in rows:
-            year = normalize_space(row.get("學年度"))
-            semester = normalize_space(row.get("學期別") or row.get("學期"))
-            term = term_from_raw(year + semester)
-            if not term:
-                continue
-            code = normalize_space(row.get("課程代碼"))
-            name = normalize_space(row.get("課程名稱"))
-            teachers = split_instructors(row.get("授課教師"))
-            active_rows = [active[teacher] for teacher in teachers if teacher in active]
-            report["parsedOfferings"] += 1
-            if not code or not name or not active_rows:
-                report["rejectedWithoutCurrentFaculty"] += 1
-                continue
-            department = normalize_space(row.get("開課單位")) or active_rows[0]["department"]
-            parsed.append({
-                "universityId": "ncku", "term": term, "courseCode": code, "name": name,
-                "department": department, "officialSourceUrl": official_url("ncku", url),
-                "departmentSourceUrl": department_url("ncku", department, active_rows, department_sites),
-                "instructors": active_rows,
-            })
-        available_terms.append(filename[5:10].replace("1", "-1", 1).replace("2", "-2", 1))
-    report["availableTerms"] = sorted({row["term"] for row in parsed})
     return parsed
 
 
@@ -925,7 +880,6 @@ def main() -> None:
     rows = []
     rows.extend(parse_ntu(active["ntu"], reports["ntu"]))
     rows.extend(parse_nthu(active["nthu"], reports["nthu"]))
-    rows.extend(parse_ncku(active["ncku"], reports["ncku"]))
     rows.extend(parse_ncu(active["ncu"], reports["ncu"]))
     rows.extend(parse_ccu(active["ccu"], reports["ccu"]))
     rows.extend(parse_ntut(active["ntut"], reports["ntut"]))

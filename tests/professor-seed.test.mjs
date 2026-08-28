@@ -17,7 +17,6 @@ const officialDomains = {
   ntu: 'ntu.edu.tw',
   nthu: 'nthu.edu.tw',
   nycu: 'nycu.edu.tw',
-  ncku: 'ncku.edu.tw',
   ncu: 'ncu.edu.tw',
   nchu: 'nchu.edu.tw',
   ccu: 'ccu.edu.tw',
@@ -33,7 +32,7 @@ const departmentIdentities = new Set(
 );
 
 test('professor seed contains only unique official university records', () => {
-  assert.ok(seeds.length >= 3000, 'official professor coverage must remain above 3,000 records');
+  assert.ok(seeds.length >= 2400, 'official professor coverage must remain above 2,400 records');
   assert.equal(new Set(seeds.map((row) => row.id)).size, seeds.length);
   assert.equal(
     new Set(seeds.map((row) => `${row.universityId}\u0000${row.department}\u0000${row.name}`)).size,
@@ -86,7 +85,7 @@ test('generated professor SQL imports all official-source records', () => {
     PRAGMA foreign_keys = ON;
     CREATE TABLE universities (id TEXT PRIMARY KEY NOT NULL);
     INSERT INTO universities (id) VALUES
-      ('ntu'), ('nthu'), ('nycu'), ('ncku'), ('ncu'), ('nchu'),
+      ('ntu'), ('nthu'), ('nycu'), ('ncu'), ('nchu'),
       ('nsysu'), ('ccu'), ('ntust'), ('ntut'), ('niu');
     CREATE TABLE professors (
       id TEXT PRIMARY KEY NOT NULL,

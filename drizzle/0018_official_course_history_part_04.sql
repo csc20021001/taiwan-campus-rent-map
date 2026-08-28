@@ -24852,4 +24852,3 @@ INSERT INTO course_instructors (course_id, instructor_name, professor_id, offici
 ('course-ntu-902533b41f8f05fb', '潘建源', (SELECT id FROM professors WHERE university_id='ntu' AND name='潘建源' LIMIT 1), 'https://nol.ntu.edu.tw/nol/coursesearch/print_table.php?course_id=B01 49000&class=11&dpt_code=B010&ser_no=37138&semester=115-1&lang=CH', '2026-08-28T00:19:06.000Z'),
 ('course-ntu-d6b955a63dc70fc1', '黃偉邦', (SELECT id FROM professors WHERE university_id='ntu' AND name='黃偉邦' LIMIT 1), 'https://nol.ntu.edu.tw/nol/coursesearch/print_table.php?course_id=B01 40010&class=02&dpt_code=B0A0&ser_no=23227&semester=115-1&lang=CH', '2026-08-28T00:19:06.000Z')
 ON CONFLICT(course_id, instructor_name) DO UPDATE SET professor_id=excluded.professor_id, official_source_url=excluded.official_source_url;
---> statement-breakpoint

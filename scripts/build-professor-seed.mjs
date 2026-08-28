@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 const sourcePath = resolve('db/professors.seed.json');
 const outputPath = resolve('db/professors-seed.generated.sql');
 const typescriptOutputPath = resolve('db/professors-seeds.generated.ts');
-const allowedUniversities = new Set(['ntu', 'nthu', 'nycu', 'ncku', 'ncu', 'nchu', 'nsysu', 'ccu', 'ntust', 'ntut', 'niu']);
+const allowedUniversities = new Set(['ntu', 'nthu', 'nycu', 'ncu', 'nchu', 'nsysu', 'ccu', 'ntust', 'ntut', 'niu']);
 const officialDomains = new Map([
   ['ntu', 'ntu.edu.tw'], ['nthu', 'nthu.edu.tw'], ['nycu', 'nycu.edu.tw'],
-  ['ncku', 'ncku.edu.tw'], ['ncu', 'ncu.edu.tw'], ['nchu', 'nchu.edu.tw'],
+  ['ncu', 'ncu.edu.tw'], ['nchu', 'nchu.edu.tw'],
   ['nsysu', 'nsysu.edu.tw'], ['ccu', 'ccu.edu.tw'], ['ntust', 'ntust.edu.tw'],
   ['ntut', 'ntut.edu.tw'], ['niu', 'niu.edu.tw'],
 ]);

@@ -1,22 +1,18 @@
 import { getD1 } from './index';
 
-export type CourseInstructorView = {
-  name: string;
-  officialSourceUrl: string;
-};
+export type CourseInstructorView = { name: string; officialSourceUrl: string };
 
 export type CourseView = {
   id: string;
+  courseId: string;
   universityId: string;
-  term: string;
-  firstTerm: string;
-  lastTerm: string;
-  offeredTerms: string[];
+  semester: '1' | '2';
   courseCode: string;
   name: string;
   department: string;
   officialSourceUrl: string;
   departmentSourceUrl: string;
+  sourceType: 'official' | 'user';
   instructors: CourseInstructorView[];
   averageRating: number | null;
   averageLearning: number | null;
@@ -29,15 +25,15 @@ export type CourseView = {
 type CourseRow = {
   id: string;
   university_id: string;
-  term: string;
-  first_term: string;
-  last_term: string;
-  offered_terms: string;
+  semester: string;
   course_code: string;
   name: string;
   department: string;
   official_source_url: string;
   department_source_url: string;
+  source_type: string;
+  instructor_name: string;
+  instructor_source_url: string;
   average_rating: number | null;
   average_learning: number | null;
   average_workload: number | null;
@@ -46,24 +42,39 @@ type CourseRow = {
   rating_count: number;
 };
 
-type InstructorRow = { course_id: string; instructor_name: string; official_source_url: string };
-
 const numericOrNull = (value: number | null) => value === null ? null : Number(value);
 
-function mapCourse(row: CourseRow, instructors: CourseInstructorView[]): CourseView {
+export function makeCourseCardId(courseId: string, instructorName: string) {
+  return `${courseId}~${encodeURIComponent(instructorName)}`;
+}
+
+export function parseCourseCardId(value: string) {
+  const separator = value.lastIndexOf('~');
+  if (separator <= 0) return null;
+  try {
+    const courseId = value.slice(0, separator);
+    const instructorName = decodeURIComponent(value.slice(separator + 1));
+    if (!/^[a-z0-9-]{2,100}$/i.test(courseId) || instructorName.length < 1 || instructorName.length > 80) return null;
+    return { courseId, instructorName };
+  } catch {
+    return null;
+  }
+}
+
+function mapCourse(row: CourseRow): CourseView {
+  const semester = row.semester === '2' ? '2' : '1';
   return {
-    id: row.id,
+    id: makeCourseCardId(row.id, row.instructor_name),
+    courseId: row.id,
     universityId: row.university_id,
-    term: row.term,
-    firstTerm: row.first_term || row.term,
-    lastTerm: row.last_term || row.term,
-    offeredTerms: (row.offered_terms || row.term).split(',').filter(Boolean),
+    semester,
     courseCode: row.course_code,
     name: row.name,
     department: row.department,
     officialSourceUrl: row.official_source_url,
     departmentSourceUrl: row.department_source_url,
-    instructors,
+    sourceType: row.source_type === 'user' ? 'user' : 'official',
+    instructors: [{ name: row.instructor_name, officialSourceUrl: row.instructor_source_url }],
     averageRating: numericOrNull(row.average_rating),
     averageLearning: numericOrNull(row.average_learning),
     averageWorkload: numericOrNull(row.average_workload),
@@ -73,28 +84,10 @@ function mapCourse(row: CourseRow, instructors: CourseInstructorView[]): CourseV
   };
 }
 
-async function attachInstructors(rows: CourseRow[]) {
-  if (rows.length === 0) return [];
-  const placeholders = rows.map(() => '?').join(', ');
-  const result = await getD1().prepare(`
-    SELECT course_id, instructor_name, official_source_url
-    FROM course_instructors
-    WHERE course_id IN (${placeholders})
-    ORDER BY course_id, instructor_name
-  `).bind(...rows.map((row) => row.id)).all<InstructorRow>();
-  const byCourse = new Map<string, CourseInstructorView[]>();
-  for (const row of result.results) {
-    byCourse.set(row.course_id, [...(byCourse.get(row.course_id) ?? []), {
-      name: row.instructor_name,
-      officialSourceUrl: row.official_source_url,
-    }]);
-  }
-  return rows.map((row) => mapCourse(row, byCourse.get(row.id) ?? []));
-}
-
 const selectWithRatings = `
-  SELECT c.id, c.university_id, c.term, c.first_term, c.last_term, c.offered_terms, c.course_code, c.name, c.department,
-    c.official_source_url, c.department_source_url,
+  SELECT c.id, c.university_id, c.semester, c.course_code, c.name, c.department,
+    c.official_source_url, c.department_source_url, c.source_type,
+    ci.instructor_name, ci.official_source_url AS instructor_source_url,
     ROUND(AVG((cr.learning_score + cr.workload_score + cr.exam_difficulty_score + cr.grading_standard_score) / 4.0), 1) AS average_rating,
     ROUND(AVG(cr.learning_score), 1) AS average_learning,
     ROUND(AVG(cr.workload_score), 1) AS average_workload,
@@ -102,18 +95,19 @@ const selectWithRatings = `
     ROUND(AVG(cr.grading_standard_score), 1) AS average_grading_standard,
     COUNT(cr.id) AS rating_count
   FROM courses c
-  LEFT JOIN course_ratings cr ON cr.course_id = c.id
+  JOIN course_instructors ci ON ci.course_id = c.id
+  LEFT JOIN course_ratings cr ON cr.course_id = c.id AND cr.instructor_name = ci.instructor_name
 `;
 
 export async function listCourses(filters: {
   universityId?: string;
   department?: string;
   search?: string;
-  term?: string;
+  semester?: string;
   limit?: number;
   offset?: number;
 }) {
-  const conditions: string[] = [];
+  const conditions: string[] = ["c.name NOT LIKE '%專題研究%'"];
   const values: Array<string | number> = [];
   if (filters.universityId) {
     conditions.push('c.university_id = ?');
@@ -124,37 +118,37 @@ export async function listCourses(filters: {
     values.push(`%${filters.department}%`);
   }
   if (filters.search) {
-    conditions.push(`(c.name LIKE ? OR c.course_code LIKE ? OR c.department LIKE ? OR EXISTS (
-      SELECT 1 FROM course_instructors ci WHERE ci.course_id = c.id AND ci.instructor_name LIKE ?
-    ))`);
+    conditions.push('(c.name LIKE ? OR c.department LIKE ? OR ci.instructor_name LIKE ?)');
     const needle = `%${filters.search}%`;
-    values.push(needle, needle, needle, needle);
+    values.push(needle, needle, needle);
   }
-  if (filters.term) {
-    conditions.push("(',' || c.offered_terms || ',') LIKE ?");
-    values.push(`%,${filters.term},%`);
+  if (filters.semester) {
+    conditions.push('c.semester = ?');
+    values.push(filters.semester);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = `WHERE ${conditions.join(' AND ')}`;
   const limit = Math.min(60, Math.max(1, filters.limit ?? 36));
   const offset = Math.max(0, filters.offset ?? 0);
-  const countRow = await getD1().prepare(`SELECT COUNT(*) AS total FROM courses c ${where}`)
+  const countRow = await getD1().prepare(`SELECT COUNT(*) AS total
+    FROM courses c JOIN course_instructors ci ON ci.course_id = c.id ${where}`)
     .bind(...values).first<{ total: number }>();
   const result = await getD1().prepare(`${selectWithRatings}
     ${where}
-    GROUP BY c.id
-    ORDER BY rating_count DESC, c.term DESC, c.department, c.name, c.course_code
+    GROUP BY c.id, ci.instructor_name
+    ORDER BY rating_count DESC, c.department, c.name, ci.instructor_name
     LIMIT ? OFFSET ?
   `).bind(...values, limit, offset).all<CourseRow>();
-  const courses = await attachInstructors(result.results);
+  const courses = result.results.map(mapCourse);
   const total = Number(countRow?.total ?? 0);
   return { courses, total, nextOffset: offset + courses.length < total ? offset + courses.length : null };
 }
 
-export async function getCourse(id: string) {
+export async function getCourse(cardId: string) {
+  const identity = parseCourseCardId(cardId);
+  if (!identity) return null;
   const row = await getD1().prepare(`${selectWithRatings}
-    WHERE c.id = ?
-    GROUP BY c.id
-  `).bind(id).first<CourseRow>();
-  if (!row) return null;
-  return (await attachInstructors([row]))[0] ?? null;
+    WHERE c.id = ? AND ci.instructor_name = ? AND c.name NOT LIKE '%專題研究%'
+    GROUP BY c.id, ci.instructor_name
+  `).bind(identity.courseId, identity.instructorName).first<CourseRow>();
+  return row ? mapCourse(row) : null;
 }

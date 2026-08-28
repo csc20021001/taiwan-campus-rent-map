@@ -7,7 +7,7 @@
     "inactiveOrUnverifiedInstructorsPublished": false
   },
   "checkedAt": "2026-08-28T00:19:06+00:00",
-  "courseCount": 35511,
+  "courseCount": 33225,
   "schools": [
     {
       "status": "imported",
@@ -82,24 +82,6 @@
       "availableTerms": [],
       "missingTerms": [],
       "activeFacultyCount": 582
-    },
-    {
-      "status": "partial",
-      "officialIndex": "https://data.ncku.edu.tw/dataset/8d6462ee513f1c1a601506265cc9f674",
-      "note": "校方開放資料目前提供 106 至 107；新版查詢另有權杖與分頁限制",
-      "universityId": "ncku",
-      "checkedAt": "2026-08-28T00:19:06+00:00",
-      "parsedOfferings": 20587,
-      "verifiedOfferings": 2286,
-      "rejectedWithoutCurrentFaculty": 15671,
-      "availableTerms": [
-        "106-1",
-        "106-2",
-        "107-1",
-        "107-2"
-      ],
-      "missingTerms": [],
-      "activeFacultyCount": 416
     },
     {
       "status": "imported",

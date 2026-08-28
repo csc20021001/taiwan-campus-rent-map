@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser, isSameOriginRequest } from '@/app/auth/server';
 import { ensureDatabase, getD1 } from '@/db';
-import { getCourse } from '@/db/courses';
+import { getCourse, parseCourseCardId } from '@/db/courses';
 import { enforceUserRateLimit, RateLimitError } from '@/db/rate-limit';
 import { validateCourseRating } from '../../validation.mjs';
 
@@ -10,7 +10,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const user = await getSessionUser(request);
   if (!user) return NextResponse.json({ error: '請先使用 Google 登入。' }, { status: 401 });
   const { id } = await context.params;
-  if (!/^[a-z0-9-]{2,100}$/i.test(id)) return NextResponse.json({ error: '課程代碼格式不正確。' }, { status: 400 });
+  const identity = parseCourseCardId(id);
+  if (!identity) return NextResponse.json({ error: '課程識別格式不正確。' }, { status: 400 });
   try {
     await enforceUserRateLimit(user.id, 'course-rating', 25, 60);
   } catch (error) {
@@ -24,23 +25,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   await ensureDatabase();
   const db = getD1();
-  if (!await db.prepare('SELECT id FROM courses WHERE id = ? LIMIT 1').bind(id).first()) {
+  if (!await db.prepare(`SELECT c.id FROM courses c JOIN course_instructors ci ON ci.course_id = c.id
+      WHERE c.id = ? AND ci.instructor_name = ? LIMIT 1`)
+    .bind(identity.courseId, identity.instructorName).first()) {
     return NextResponse.json({ error: '找不到課程資料。' }, { status: 404 });
   }
   const now = new Date().toISOString();
   const { learningScore, workloadScore, examDifficultyScore, gradingStandardScore } = validated.value;
   await db.prepare(`INSERT INTO course_ratings (
-      id, course_id, user_id, learning_score, workload_score,
+      id, course_id, instructor_name, user_id, learning_score, workload_score,
       exam_difficulty_score, grading_standard_score, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id, course_id) DO UPDATE SET
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, course_id, instructor_name) DO UPDATE SET
       learning_score = excluded.learning_score,
       workload_score = excluded.workload_score,
       exam_difficulty_score = excluded.exam_difficulty_score,
       grading_standard_score = excluded.grading_standard_score,
       updated_at = excluded.updated_at`)
     .bind(
-      crypto.randomUUID(), id, user.id, learningScore, workloadScore,
+      crypto.randomUUID(), identity.courseId, identity.instructorName, user.id, learningScore, workloadScore,
       examDifficultyScore, gradingStandardScore, now, now,
     ).run();
   return NextResponse.json({ course: await getCourse(id) });

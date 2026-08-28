@@ -7399,4 +7399,3 @@ INSERT INTO course_instructors (course_id, instructor_name, professor_id, offici
 ('course-nycu-110000', '楊智傑', (SELECT id FROM professors WHERE university_id='nycu' AND name='楊智傑' LIMIT 1), 'https://coz.aa.nycu.edu.tw/course/115/1/110000', '2026-08-28T00:19:06.000Z'),
 ('course-nycu-110000', '阮琪昌', (SELECT id FROM professors WHERE university_id='nycu' AND name='阮琪昌' LIMIT 1), 'https://coz.aa.nycu.edu.tw/course/115/1/110000', '2026-08-28T00:19:06.000Z')
 ON CONFLICT(course_id, instructor_name) DO UPDATE SET professor_id=excluded.professor_id, official_source_url=excluded.official_source_url;
---> statement-breakpoint

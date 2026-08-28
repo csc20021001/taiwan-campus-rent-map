@@ -6,7 +6,7 @@ const outputPath = resolve('db/department-sites.generated.json');
 const nycuDirectoryPath = resolve('db/nycu-official-units.generated.json');
 const officialDomains = new Map([
   ['ntu', 'ntu.edu.tw'], ['nthu', 'nthu.edu.tw'], ['nycu', 'nycu.edu.tw'],
-  ['ncku', 'ncku.edu.tw'], ['ncu', 'ncu.edu.tw'], ['nchu', 'nchu.edu.tw'],
+  ['ncu', 'ncu.edu.tw'], ['nchu', 'nchu.edu.tw'],
   ['ccu', 'ccu.edu.tw'], ['nsysu', 'nsysu.edu.tw'], ['ntust', 'ntust.edu.tw'],
   ['ntut', 'ntut.edu.tw'], ['niu', 'niu.edu.tw'],
 ]);
