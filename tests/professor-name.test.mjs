@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-const courseSeeds = readFileSync(new URL('../db/course-seeds.ts', import.meta.url), 'utf8');
+const importer = readFileSync(new URL('../scripts/import-official-course-history.py', import.meta.url), 'utf8');
 const courseDirectory = readFileSync(new URL('../app/courses/course-directory.tsx', import.meta.url), 'utf8');
 
 test('course instructors use full public names without masking', () => {
-  assert.match(courseSeeds, /\{ name: '吳紀聖' \}/);
+  assert.match(importer, /"name": name/);
   assert.match(courseDirectory, /instructor\.name/);
   assert.doesNotMatch(courseDirectory, /maskProfessorName|○/);
 });

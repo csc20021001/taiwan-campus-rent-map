@@ -15,6 +15,7 @@
 - 租屋地點評論可公開閱讀；使用 Google 登入後可發表 4～500 字評論
 - 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
 - 課程以課名與課號為主體，旁列完整授課教師姓名；課程、教師與系所外部連結只使用學校官方公開網站
+- 35,511 個去重後課程主題；可依 106-1～115-1 學期篩選並分頁載入，評分固定掛在同校同課號的單一課程主題
 - 可依「學習收穫、作業量、考試難易、給分標準」四項給予 1～5 分評分；給分分數越高代表越寬鬆
 - AdSense 版位、隱私權政策、服務條款與 `ads.txt`
 
@@ -42,7 +43,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `auth_sessions`：工作階段 token 的 SHA-256 雜湊
 - `academic_departments`：11 校公開官方網站所列系所、研究所與學位單位
 - `professors`：保留官方師資身分與連結，用來關聯課程授課教師；同校同名老師跨系所名稱以「／」合併
-- `courses`、`course_instructors`：115-1 官方課程快照、授課教師與學校官方來源
+- `courses`、`course_instructors`：官方歷史課程、首次／最近開課學期、完整開課學期清單、授課教師與校方來源
 - `course_ratings`：唯一 `(user_id, course_id)` 的四項課程評分，不包含教師態度欄位
 - `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
 - `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
@@ -67,7 +68,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 | POST | `/api/rentals` | 登入後新增或導向既有地點 |
 | POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
 | POST | `/api/rentals/:id/comments` | 登入後發表公開租屋評論 |
-| GET | `/api/courses` | 依 `university_id`、`department`、`search` 篩選課程、課號、教師或系所 |
+| GET | `/api/courses` | 依 `university_id`、`department`、`search`、`term` 篩選課程、課號、教師或系所；支援 `limit`、`offset` 分頁 |
 | GET | `/api/courses/:id` | 課程、完整授課教師、官方連結、四項平均與評分人數 |
 | GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
 | POST | `/api/courses/:id/rating` | 登入後 UPSERT 四項課程評分 |
@@ -116,12 +117,15 @@ npm run dev
 - `drizzle/0011_unify_professor_identities.sql`：合併同校同名老師、保留每位使用者最新一筆評分並改為單一老師身分
 - `drizzle/0012_nycu_campuses_and_current_rentals.sql`：新增陽明校區與教育部雲端租屋生活網目前待租地點
 - `drizzle/0013_courses_and_course_ratings.sql`：新增課程、授課教師與不含教師態度的四項課程評分
+- `drizzle/0014_course_history_terms.sql`：新增首次、最近與完整開課學期欄位
+- `drizzle/0015_*.sql`～`0020_*.sql`：部署時分段匯入校方官方歷史課程，避免 API 首次請求執行大量 seed，並讓每個來源檔保持在部署平台限制內
 - `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
 - `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
 - `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域
 - `db/nycu-official-units.generated.json`：由陽明交大官方「115 年網站健檢受檢單位清單」整理的系所網址
 - `db/department-seeds.ts`：收錄 11 校官方學術單位頁所列系所、研究所、學位學程與教學單位
-- `db/course-seeds.ts`：收錄 115-1 學校官方課程／教學大綱來源、完整授課教師與官方系所連結
+- `scripts/import-official-course-history.py`：只從各校官方 HTTPS 網域建立歷史課程、在校授課身分與系所來源快照，並同步產生 D1 migration 與稽核報告
+- `db/course-seeds.generated.ts`：35,511 個去重後課程主題；`db/course-import-report.generated.json` 記錄逐校涵蓋學期、拒絕筆數與來源限制
 
 ```bash
 npm run seed:build
@@ -129,7 +133,26 @@ npm run professors:discover
 npm run professors:faculty-pages
 npm run professors:extract
 npm run professors:merge
+npm run courses:official
 ```
+
+課程匯入需要 Python 3 與 `openpyxl`。截至 2026-08-28 的官方來源涵蓋如下：
+
+| 學校 | 已發布課程主題 | 官方資料涵蓋 |
+|---|---:|---|
+| 臺大 | 17,564 | 106-1～115-1 |
+| 清大 | 2,349 | 校方現有下載檔：108-1～115-1（不含目前未提供的 114-2） |
+| 陽明交大 | 1 | 保留已核對 115-1 官方課程；校方前端的資料 API 不在校方網域，依政策不直接取用 |
+| 成大 | 2,286 | 校方開放資料目前提供 106-1～107-2 |
+| 中央 | 6,975 | 106-1～115-1 |
+| 中興 | 2 | 保留已核對 115-1 官方課程；歷史表單的批次匯入尚未納入 |
+| 中正 | 1,942 | 校方壓縮檔 106-1～114-1；114-2、115-1 尚未發布於該目錄 |
+| 中山 | 0 | 官方歷史查詢要求人工驗證碼，程式不繞過 |
+| 臺科 | 2 | 保留已核對 115-1 官方課程；新版查詢介面尚未納入批次匯入 |
+| 北科 | 4,389 | 106-1～115-1 |
+| 宜大 | 1 | 保留系所官方 115-1 課程；尚未找到校級可機讀歷史清單 |
+
+每筆歷史課程至少有一位授課者能由「現行官方師資頁」或「115-1 官方課表／教學大綱」證明仍在該校；未通過者不發布。中山的人工驗證碼、陽明交大的非校方資料 API 等限制會保留在稽核報告，不以論壇、搜尋摘要、商業課程網或其他第三方資料補洞。
 
 Sites 部署會把 `drizzle/` 一併打包並依 journal 套用 D1 migration。若使用自己的 Cloudflare 帳號與 Wrangler，先建立 D1、設定 `DB` binding，然後執行：
 

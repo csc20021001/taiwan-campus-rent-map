@@ -9,6 +9,9 @@ export type CourseView = {
   id: string;
   universityId: string;
   term: string;
+  firstTerm: string;
+  lastTerm: string;
+  offeredTerms: string[];
   courseCode: string;
   name: string;
   department: string;
@@ -27,6 +30,9 @@ type CourseRow = {
   id: string;
   university_id: string;
   term: string;
+  first_term: string;
+  last_term: string;
+  offered_terms: string;
   course_code: string;
   name: string;
   department: string;
@@ -49,6 +55,9 @@ function mapCourse(row: CourseRow, instructors: CourseInstructorView[]): CourseV
     id: row.id,
     universityId: row.university_id,
     term: row.term,
+    firstTerm: row.first_term || row.term,
+    lastTerm: row.last_term || row.term,
+    offeredTerms: (row.offered_terms || row.term).split(',').filter(Boolean),
     courseCode: row.course_code,
     name: row.name,
     department: row.department,
@@ -84,7 +93,7 @@ async function attachInstructors(rows: CourseRow[]) {
 }
 
 const selectWithRatings = `
-  SELECT c.id, c.university_id, c.term, c.course_code, c.name, c.department,
+  SELECT c.id, c.university_id, c.term, c.first_term, c.last_term, c.offered_terms, c.course_code, c.name, c.department,
     c.official_source_url, c.department_source_url,
     ROUND(AVG((cr.learning_score + cr.workload_score + cr.exam_difficulty_score + cr.grading_standard_score) / 4.0), 1) AS average_rating,
     ROUND(AVG(cr.learning_score), 1) AS average_learning,
@@ -96,9 +105,16 @@ const selectWithRatings = `
   LEFT JOIN course_ratings cr ON cr.course_id = c.id
 `;
 
-export async function listCourses(filters: { universityId?: string; department?: string; search?: string }) {
+export async function listCourses(filters: {
+  universityId?: string;
+  department?: string;
+  search?: string;
+  term?: string;
+  limit?: number;
+  offset?: number;
+}) {
   const conditions: string[] = [];
-  const values: string[] = [];
+  const values: Array<string | number> = [];
   if (filters.universityId) {
     conditions.push('c.university_id = ?');
     values.push(filters.universityId);
@@ -114,14 +130,24 @@ export async function listCourses(filters: { universityId?: string; department?:
     const needle = `%${filters.search}%`;
     values.push(needle, needle, needle, needle);
   }
+  if (filters.term) {
+    conditions.push("(',' || c.offered_terms || ',') LIKE ?");
+    values.push(`%,${filters.term},%`);
+  }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const limit = Math.min(60, Math.max(1, filters.limit ?? 36));
+  const offset = Math.max(0, filters.offset ?? 0);
+  const countRow = await getD1().prepare(`SELECT COUNT(*) AS total FROM courses c ${where}`)
+    .bind(...values).first<{ total: number }>();
   const result = await getD1().prepare(`${selectWithRatings}
     ${where}
     GROUP BY c.id
     ORDER BY rating_count DESC, c.term DESC, c.department, c.name, c.course_code
-    LIMIT 100
-  `).bind(...values).all<CourseRow>();
-  return attachInstructors(result.results);
+    LIMIT ? OFFSET ?
+  `).bind(...values, limit, offset).all<CourseRow>();
+  const courses = await attachInstructors(result.results);
+  const total = Number(countRow?.total ?? 0);
+  return { courses, total, nextOffset: offset + courses.length < total ? offset + courses.length : null };
 }
 
 export async function getCourse(id: string) {

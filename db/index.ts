@@ -7,7 +7,6 @@ import { fixedAbsoluteCoordinate } from './rental-coordinate-overrides.mjs';
 import { professorSeeds } from './professors-seeds.generated';
 import { departmentSeeds } from './department-seeds';
 import { currentGovernmentRentalSeeds } from './current-government-rental-seeds';
-import { courseSeeds } from './course-seeds';
 
 const sampleListingIds = [
   'ntu-01', 'ntu-02', 'ntu-03', 'nthu-01', 'nycu-01', 'ncku-01', 'ncu-01',
@@ -64,6 +63,21 @@ async function ensureProfessorRatingDimensions() {
     ['workload_score', 'ALTER TABLE professor_ratings ADD COLUMN workload_score INTEGER NOT NULL DEFAULT 3 CHECK (workload_score BETWEEN 1 AND 5)'],
     ['exam_difficulty_score', 'ALTER TABLE professor_ratings ADD COLUMN exam_difficulty_score INTEGER NOT NULL DEFAULT 3 CHECK (exam_difficulty_score BETWEEN 1 AND 5)'],
     ['grading_standard_score', 'ALTER TABLE professor_ratings ADD COLUMN grading_standard_score INTEGER NOT NULL DEFAULT 3 CHECK (grading_standard_score BETWEEN 1 AND 5)'],
+  ] as const;
+  for (const [column, sql] of additions) {
+    if (!existing.has(column)) await db.prepare(sql).run();
+  }
+}
+
+async function ensureCourseHistoryColumns() {
+  const db = getD1();
+  const tableInfo = await db.prepare('PRAGMA table_info(courses)').all<{ name: string }>();
+  if (tableInfo.results.length === 0) return;
+  const existing = new Set(tableInfo.results.map((column) => column.name));
+  const additions = [
+    ['first_term', "ALTER TABLE courses ADD COLUMN first_term TEXT NOT NULL DEFAULT ''"],
+    ['last_term', "ALTER TABLE courses ADD COLUMN last_term TEXT NOT NULL DEFAULT ''"],
+    ['offered_terms', "ALTER TABLE courses ADD COLUMN offered_terms TEXT NOT NULL DEFAULT ''"],
   ] as const;
   for (const [column, sql] of additions) {
     if (!existing.has(column)) await db.prepare(sql).run();
@@ -172,6 +186,9 @@ async function initializeCoreTables() {
       id TEXT PRIMARY KEY NOT NULL,
       university_id TEXT NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
       term TEXT NOT NULL,
+      first_term TEXT NOT NULL DEFAULT '',
+      last_term TEXT NOT NULL DEFAULT '',
+      offered_terms TEXT NOT NULL DEFAULT '',
       course_code TEXT NOT NULL,
       name TEXT NOT NULL,
       department TEXT NOT NULL,
@@ -255,6 +272,7 @@ async function initializeCoreTables() {
   ]);
   await ensureProfessorOfficialSourceUrl();
   await ensureProfessorRatingDimensions();
+  await ensureCourseHistoryColumns();
   await ensureUnifiedProfessorIdentities();
   await db.batch([
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_departments_identity ON academic_departments(university_id, name)'),
@@ -321,41 +339,6 @@ async function seedProfessors() {
       updated_at = excluded.updated_at
   `).bind(seed.id, seed.universityId, seed.department, seed.name, seed.sourceUrl, timestamp, timestamp));
   await runBatches(statements);
-}
-
-async function seedCourses() {
-  const db = getD1();
-  const timestamp = '2026-08-27T00:00:00.000Z';
-  const courseStatements = courseSeeds.map((seed) => db.prepare(`
-    INSERT INTO courses (
-      id, university_id, term, course_code, name, department,
-      official_source_url, department_source_url, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(university_id, term, course_code) DO UPDATE SET
-      name = excluded.name,
-      department = excluded.department,
-      official_source_url = excluded.official_source_url,
-      department_source_url = excluded.department_source_url,
-      updated_at = excluded.updated_at
-  `).bind(
-    seed.id, seed.universityId, seed.term, seed.courseCode, seed.name, seed.department,
-    seed.officialSourceUrl, seed.departmentSourceUrl, timestamp, timestamp,
-  ));
-  await runBatches(courseStatements);
-
-  const professorByIdentity = new Map(professorSeeds.map((seed) => [`${seed.universityId}\u0000${seed.name}`, seed]));
-  const instructorStatements = courseSeeds.flatMap((seed) => seed.instructors.map((instructor) => {
-    const professor = professorByIdentity.get(`${seed.universityId}\u0000${instructor.name}`);
-    return db.prepare(`
-      INSERT INTO course_instructors (
-        course_id, instructor_name, professor_id, official_source_url, created_at
-      ) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(course_id, instructor_name) DO UPDATE SET
-        professor_id = excluded.professor_id,
-        official_source_url = excluded.official_source_url
-    `).bind(seed.id, instructor.name, professor?.id ?? null, instructor.officialSourceUrl ?? professor?.sourceUrl ?? '', timestamp);
-  }));
-  await runBatches(instructorStatements);
 }
 
 async function seedRentalLocations() {
@@ -537,7 +520,6 @@ async function initializeDatabase() {
   await initializeCoreTables();
   await seedDepartments();
   await seedProfessors();
-  await seedCourses();
   await seedRentalLocations();
   await db.prepare('PRAGMA optimize').run();
 }

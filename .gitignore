@@ -40,3 +40,8 @@ next-env.d.ts
 /work/
 /tmp/
 /db/professors-seed.generated.sql
+/db/course-seeds.generated.ts
+/.course-cache/
+/.research/
+__pycache__/
+*.pyc
