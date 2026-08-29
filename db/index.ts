@@ -7,7 +7,7 @@ import { departmentSeeds } from './department-seeds';
 const activeUniversityIds = new Set(universities.map((school) => school.id));
 
 let databaseReady: Promise<void> | null = null;
-const runtimeSchemaVersion = '2026-08-29-course-only-v1';
+const runtimeSchemaVersion = '2026-08-29-course-links-v1';
 
 export function getD1() {
   if (!env.DB) throw new Error('Cloudflare D1 binding `DB` is unavailable.');

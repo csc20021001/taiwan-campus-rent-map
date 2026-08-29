@@ -44,6 +44,13 @@ OFFICIAL_INDEX = {
     "fcu": "https://coursesearch04.fcu.edu.tw/",
 }
 
+OFFICIAL_DEPARTMENT_DIRECTORIES = {
+    "cycu": "https://www.cycu.edu.tw/?page_id=2399",
+    "tku": "https://www.tku.edu.tw/tku/?page_id=4807",
+    "yzu": "https://www.yzu.edu.tw/index.php/tw/academics",
+    "fcu": "https://www.fcu.edu.tw/organization/cof-units/",
+}
+
 OFFICIAL_SUFFIXES = {
     "cycu": ("cycu.edu.tw",),
     "tku": ("tku.edu.tw",),
@@ -92,6 +99,130 @@ def clean_course_name(value: object) -> str:
     text = normalize_space(value).strip("　-—:：")
     text = re.split(r"(?:◇|限本系|本課程|本科目|淡江大學智慧|<)" , text, maxsplit=1)[0].strip()
     return text[:160]
+
+
+DEPARTMENT_ALIASES = {
+    "企管": "企業管理",
+    "應外": "應用外國語文",
+    "商設": "商業設計",
+    "醫工": "生物醫學工程",
+    "資管": "資訊管理",
+    "國貿": "國際經營與貿易",
+    "資訊": "資訊工程",
+    "資工": "資訊工程",
+    "資傳": "資訊傳播",
+    "環工": "環境工程",
+    "應數": "應用數學",
+    "財法": "財經法律",
+    "特教": "特殊教育",
+    "室設": "室內設計",
+    "財金": "財務金融",
+    "生科": "生物科技",
+    "宗研": "宗教",
+    "教研": "教育",
+    "師培": "師資培育",
+    "中文": "中國文學",
+    "外文": "外國語文",
+    "機電": "機械與電腦輔助工程",
+    "環科": "環境工程與科學",
+    "自控": "自動控制工程",
+    "纖維複材": "纖維與複合材料",
+    "通訊": "通訊工程",
+    "工工": "工業工程",
+    "土管": "土地管理",
+    "水利": "水利工程",
+    "風保": "風險管理與保險",
+    "航太": "航空太空工程",
+    "都資": "都市計畫與空間資訊",
+    "大傳": "大眾傳播",
+    "資圖": "資訊與圖書館",
+    "化材": "化學工程與材料工程",
+    "水環": "水資源及環境工程",
+    "運管": "運輸管理",
+    "教科": "教育科技",
+    "教設": "教育與未來設計",
+    "政經": "全球政治經濟",
+    "政法": "公共行政",
+}
+
+
+def normalize_department_identity(value: object) -> str:
+    text = normalize_space(value)
+    text = re.sub(r"\([^)]*\)|（[^）]*）", "", text)
+    text = re.split(r"\s+[A-Z][A-Z\s’'(),.-]{3,}", text, maxsplit=1)[0]
+    text = re.sub(r"(?:碩士|博士|學士)?(?:在職)?(?:專班|班)$", "", text)
+    text = re.sub(r"(?:學系|研究所|學位學程|學程|中心|學院|系|所|班|日|進學)$", "", text)
+    text = re.sub(r"[一二三四五六七八九十]+$", "", text)
+    text = re.sub(r"[^0-9A-Za-z\u3400-\u9fff]", "", text).lower()
+    return DEPARTMENT_ALIASES.get(text, text)
+
+
+class OfficialLinkParser(HTMLParser):
+    def __init__(self, base_url: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.base_url = base_url
+        self.links: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "a":
+            self._href = dict(attrs).get("href")
+            self._text = []
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or self._href is None:
+            return
+        text = normalize_space("".join(self._text))
+        url = urllib.parse.urljoin(self.base_url, self._href)
+        if text and url.startswith("http://"):
+            url = "https://" + url[7:]
+        if text:
+            self.links.append((text, url))
+        self._href = None
+        self._text = []
+
+
+def load_official_department_links(school: str) -> list[tuple[str, str]]:
+    directory = official_url(school, OFFICIAL_DEPARTMENT_DIRECTORIES[school])
+    payload = cached_bytes(
+        f"official-departments-{school}.html",
+        directory,
+        timeout=90,
+        minimum_size=500,
+    )
+    parser = OfficialLinkParser(directory)
+    parser.feed(payload.decode("utf-8-sig", errors="replace"))
+    links: list[tuple[str, str]] = []
+    for name, url in parser.links:
+        try:
+            source = official_url(school, url)
+        except ValueError:
+            continue
+        path = urllib.parse.urlparse(source).path.lower()
+        if re.search(r"\.(?:avif|bmp|docx?|gif|jpe?g|odp|ods|odt|pdf|png|pptx?|rar|svg|webp|xlsx?|zip)$", path):
+            continue
+        identity = normalize_department_identity(name)
+        if len(identity) >= 2 and identity not in {"了解更多", "learnmore", "首頁", "回首頁"}:
+            links.append((name, source))
+    return links
+
+
+def resolve_department_url(school: str, department: str, links: list[tuple[str, str]]) -> str:
+    target = normalize_department_identity(department)
+    ranked: list[tuple[int, int, int, str]] = []
+    for name, url in links:
+        identity = normalize_department_identity(name)
+        score = 1000 if name == department else 900 if identity == target else 700 if min(len(identity), len(target)) >= 2 and (identity in target or target in identity) else 0
+        if score:
+            ranked.append((score, -len(url), len(identity), url))
+    if ranked:
+        return max(ranked)[3]
+    return official_url(school, OFFICIAL_DEPARTMENT_DIRECTORIES[school])
 
 
 def split_teachers(value: object) -> list[str]:
@@ -169,9 +300,11 @@ class CourseRecord:
 class CourseCollection:
     def __init__(self) -> None:
         self.records: dict[tuple[str, str, str, str], CourseRecord] = {}
+        self.department_urls: dict[tuple[str, str], str] = {}
 
     def add(self, *, school: str, term: str, name: object, department: object,
             teachers: object, source_url: str, department_url: str | None = None,
+            department_links: list[tuple[str, str]] | None = None,
             active_teachers: set[str] | None = None) -> None:
         course_name = clean_course_name(name)
         if not course_name or "專題研究" in course_name:
@@ -186,7 +319,15 @@ class CourseCollection:
             return
         dept = clean_department(department)
         source = official_url(school, source_url)
-        dept_source = official_url(school, department_url or source_url)
+        department_key = (school, dept)
+        if department_url:
+            dept_source = official_url(school, department_url)
+        else:
+            dept_source = self.department_urls.get(department_key) or official_url(
+                school,
+                resolve_department_url(school, dept, department_links or []),
+            )
+            self.department_urls[department_key] = dept_source
         key = (school, semester, dept, course_name)
         record = self.records.setdefault(key, CourseRecord(
             school=school,
@@ -295,6 +436,7 @@ def import_cycu() -> tuple[CourseCollection, dict[str, object]]:
         for row in offerings.get(CURRENT_TERM, [])
         for teacher in split_teachers(row.get("TEACHER_CNAME", ""))
     }
+    department_links = load_official_department_links(school)
     courses = CourseCollection()
     for term, rows in offerings.items():
         for row in rows:
@@ -305,6 +447,7 @@ def import_cycu() -> tuple[CourseCollection, dict[str, object]]:
                 department=row.get("AUTHORITY_NAME") or row.get("ADMIN_DEPT_NAME") or row.get("DEPT_ABVI_C"),
                 teachers=row.get("TEACHER_CNAME"),
                 source_url=OFFICIAL_INDEX[school],
+                department_links=department_links,
                 active_teachers=active,
             )
     return courses, {
@@ -376,6 +519,7 @@ def import_fcu() -> tuple[CourseCollection, dict[str, object]]:
         for row in rows
         for teacher in split_teachers(row.get("scr_teacher", ""))
     }
+    department_links = load_official_department_links(school)
     courses = CourseCollection()
     raw_count = 0
     for (year, semester, _, _), (college, rows) in offerings.items():
@@ -393,7 +537,7 @@ def import_fcu() -> tuple[CourseCollection, dict[str, object]]:
                 department=department,
                 teachers=row.get("scr_teacher"),
                 source_url=outline,
-                department_url=OFFICIAL_INDEX[school],
+                department_links=department_links,
                 active_teachers=active,
             )
     return courses, {
@@ -449,6 +593,7 @@ def import_tku() -> tuple[CourseCollection, dict[str, object]]:
                 raw.append((department, name, teacher, source_url))
 
     active = {teacher for _, _, names, _ in raw for teacher in split_teachers(names)}
+    department_links = load_official_department_links(school)
     courses = CourseCollection()
     for department, name, teachers, source_url in raw:
         courses.add(
@@ -458,7 +603,7 @@ def import_tku() -> tuple[CourseCollection, dict[str, object]]:
             department=department,
             teachers=teachers,
             source_url=source_url,
-            department_url=OFFICIAL_INDEX[school],
+            department_links=department_links,
             active_teachers=active,
         )
     return courses, {
@@ -602,6 +747,7 @@ def import_yzu() -> tuple[CourseCollection, dict[str, object]]:
 
     current_rows = [row for _, label, page in current_pages for row in extract(page, label)]
     active = {teacher for _, _, names, _ in current_rows for teacher in split_teachers(names)}
+    department_links = load_official_department_links(school)
     courses = CourseCollection()
     for department, name, teachers, source in current_rows:
         courses.add(
@@ -611,7 +757,7 @@ def import_yzu() -> tuple[CourseCollection, dict[str, object]]:
             department=department,
             teachers=teachers,
             source_url=source,
-            department_url=OFFICIAL_INDEX[school],
+            department_links=department_links,
             active_teachers=active,
         )
     return courses, {
@@ -671,7 +817,7 @@ def build_sql(courses: CourseCollection) -> list[str]:
     return statements
 
 
-def write_migrations(statements: list[str], max_bytes: int = 900_000) -> list[Path]:
+def write_migrations(statements: list[str], max_bytes: int = 875_000) -> list[Path]:
     for path in DRIZZLE.glob("00??_four_private_universities_part_*.sql"):
         path.unlink()
     chunks: list[list[str]] = []

@@ -99,6 +99,7 @@ test('generated migrations load every school and split each instructor into a ra
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM courses WHERE source_type != 'official'").get().count, 0);
 
   const suffixes = { cycu: 'cycu.edu.tw', tku: 'tku.edu.tw', yzu: 'yzu.edu.tw', fcu: 'fcu.edu.tw' };
+  const courseIndexes = new Set(Object.values(report.schools).map((school) => school.officialIndex));
   const urls = db.prepare(`SELECT c.university_id, c.official_source_url AS course_url,
     c.department_source_url AS department_url, ci.official_source_url AS instructor_url,
     ci.instructor_name FROM courses c JOIN course_instructors ci ON ci.course_id = c.id`).all();
@@ -109,6 +110,13 @@ test('generated migrations load every school and split each instructor into a ra
       const suffix = suffixes[row.university_id];
       assert.ok(host === suffix || host.endsWith(`.${suffix}`), value);
     }
+    assert.ok(!courseIndexes.has(row.department_url), row.department_url);
+    assert.doesNotMatch(new URL(row.department_url).pathname, /\.(?:docx?|gif|jpe?g|pdf|png|pptx?|svg|webp|xlsx?|zip)$/i);
+  }
+  for (const school of Object.keys(report.schools)) {
+    const distinct = db.prepare(`SELECT COUNT(DISTINCT department_source_url) AS count
+      FROM courses WHERE university_id = ?`).get(school).count;
+    assert.ok(distinct > 1, `${school} should resolve department links beyond one generic course portal`);
   }
   db.close();
 });

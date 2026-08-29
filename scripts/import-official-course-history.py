@@ -152,20 +152,45 @@ def load_active_faculty() -> dict[str, dict[str, dict]]:
 
 def load_department_sites(university_id: str) -> list[dict]:
     rows = json.loads((DB / "department-sites.generated.json").read_text(encoding="utf-8"))
-    return [row for row in rows if row["universityId"] == university_id and row.get("websiteUrl")]
+    return [row for row in rows if row["universityId"] == university_id]
+
+
+def normalize_department_identity(value: object) -> str:
+    text = normalize_space(value)
+    text = re.sub(r"\([^)]*\)|（[^）]*）", "", text)
+    text = re.sub(r"(?:碩士|博士|學士)?(?:在職)?(?:專班|班)$", "", text)
+    text = re.sub(r"(?:學系|研究所|學位學程|學程|中心|學院|系|所|班)", "", text)
+    return re.sub(r"[^0-9A-Za-z\u3400-\u9fff]", "", text).lower()
+
+
+_DEPARTMENT_URL_CACHE: dict[tuple[str, str], str] = {}
 
 
 def department_url(university_id: str, department: str, active_rows: list[dict], department_sites: list[dict]) -> str:
-    target = re.sub(r"[學系所程班中心院]", "", department)
+    del active_rows
+    cache_key = (university_id, department)
+    if cache_key in _DEPARTMENT_URL_CACHE:
+        return _DEPARTMENT_URL_CACHE[cache_key]
+    target = normalize_department_identity(department)
     ranked = []
     for row in department_sites:
-        name = re.sub(r"[學系所程班中心院]", "", row["name"])
-        score = 100 if row["name"] == department else (70 if name and (name in target or target in name) else 0)
-        if score:
-            ranked.append((score, row["websiteUrl"]))
+        name = normalize_department_identity(row["name"])
+        score = 1000 if row["name"] == department else 900 if name and name == target else 700 if min(len(name), len(target)) >= 2 and (name in target or target in name) else 0
+        source = row.get("websiteUrl") or row.get("officialDirectoryUrl")
+        if score and source:
+            ranked.append((score, len(name), source))
     if ranked:
-        return official_url(university_id, max(ranked)[1])
-    return active_rows[0]["sourceUrl"] if active_rows else ""
+        result = official_url(university_id, max(ranked)[2])
+        _DEPARTMENT_URL_CACHE[cache_key] = result
+        return result
+    directory = next((row.get("officialDirectoryUrl") for row in department_sites if row.get("officialDirectoryUrl")), None)
+    if directory:
+        result = official_url(university_id, directory)
+        _DEPARTMENT_URL_CACHE[cache_key] = result
+        return result
+    result = official_url(university_id, COURSE_SOURCE_STATUS[university_id]["officialIndex"])
+    _DEPARTMENT_URL_CACHE[cache_key] = result
+    return result
 
 
 def term_from_raw(value: object) -> str | None:

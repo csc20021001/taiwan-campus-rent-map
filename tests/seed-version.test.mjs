@@ -21,5 +21,5 @@ test('cold starts use one guarded schema-state query and retain a missing-data f
   assert.match(database, /Number\(state\.course_count\) > 0/);
   assert.match(database, /catch \{\s+return false/);
   assert.match(schemaState, /'schema_version', '2026-08-28-v1'/);
-  assert.match(database, /2026-08-29-course-only-v1/);
+  assert.match(database, /2026-08-29-course-links-v1/);
 });

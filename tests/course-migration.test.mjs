@@ -63,6 +63,8 @@ test('official course history migration loads the generated snapshot into SQLite
       const suffix = suffixes[course.university_id];
       assert.ok(host === suffix || host.endsWith(`.${suffix}`), url);
     }
+    assert.notEqual(course.official_source_url, course.department_source_url, course.official_source_url);
+    assert.doesNotMatch(new URL(course.department_source_url).pathname, /\.(?:docx?|gif|jpe?g|pdf|png|pptx?|svg|webp|xlsx?|zip)$/i);
   }
   assert.ok(instructors.some((row) => /^[\u3400-\u9fff]{2,8}$/.test(row.instructor_name)));
   for (const instructor of instructors) {
