@@ -66,6 +66,12 @@ const ratingDimensions: Array<{
   { key: 'attendanceFrequencyScore', label: '點名頻率', low: '很少', high: '很頻繁', hint: '越高代表越常點名', averageKey: 'averageAttendanceFrequency' },
 ];
 
+function toneForDepartment(department: string) {
+  let hash = 0;
+  for (const character of department) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
+  return String(hash % 6);
+}
+
 export function CourseDirectory() {
   const [schoolId, setSchoolId] = useState('ntu');
   const [search, setSearch] = useState('');
@@ -226,54 +232,82 @@ export function CourseDirectory() {
   }
 
   return <main className="professor-page">
-    <header className="professor-topbar"><span className="professor-brand"><GraduationCap size={18} />WZUNAA 課程評分</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fcourses"><LogIn size={14} />Google 登入</a>}</header>
-    <section className="professor-hero"><p><Star size={14} fill="currentColor" />0–100 分課程評分</p><h1>{school.shortName}課程評分</h1><span>以課程與授課教師為單位，查看學習收穫、作業量、考試難度、給分標準與點名頻率</span><button className="course-add-button" type="button" onClick={openSubmission}><Plus size={15} />新增課程</button></section>
-    <p className="professor-source-note"><ShieldCheck size={14} />資料來源以學校公開課程頁為準；課程與授課教師仍可能依校方最新公告調整。</p>
-    <section className="professor-controls">
-      <label>學校<select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setSemester(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label><Search size={14} />搜尋課程、老師或系所<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="輸入課名、老師或系所" /></label>
-      <label>系所<select value={department} onChange={(event) => setDepartment(event.target.value)}><option value="">全部系所（{departmentsLoading ? '…' : departments.length}）</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
-      <label>學期<select value={semester} onChange={(event) => setSemester(event.target.value)}><option value="">全部</option><option value="1">上學期</option><option value="2">下學期</option></select></label>
-    </section>
-    {message && <p className={`professor-message ${message === '評分已更新。' || message === '課程已新增。' ? 'is-success' : ''}`}>{message}</p>}
-    <section className="professor-grid">
-      {loading && <div className="professor-empty"><span className="loading-dot" />載入中</div>}
-      {!loading && courses.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}目前沒有已收錄課程` : '目前沒有符合條件的課程'}</strong><span>只有能由官方課程頁與現職師資名錄同時核對的課程才會顯示。</span></div>}
-      {courses.map((course) => <article className={`professor-card ${ratingTargetId === course.id ? 'is-rating' : ''}`} key={course.id}>
-        <small>{course.semester === '1' ? '上學期' : '下學期'}{course.sourceType === 'user' ? ' · 使用者新增' : ''}</small><h2>{course.name}</h2>
-        <p className="course-instructors">授課：{course.instructors.map((instructor) => <span key={`${course.id}-${instructor.name}`}>{instructor.officialSourceUrl ? <a href={instructor.officialSourceUrl} target="_blank" rel="noreferrer">{instructor.name}<ExternalLink size={10} /></a> : instructor.name}</span>)}</p>
-        <div className="course-official-links">{course.officialSourceUrl && <a href={course.officialSourceUrl} target="_blank" rel="noreferrer">{course.sourceType === 'official' ? '官方課程資料' : '參考來源'}<ExternalLink size={11} /></a>}{course.departmentSourceUrl && <a href={course.departmentSourceUrl} target="_blank" rel="noreferrer">官方系所網站<ExternalLink size={11} /></a>}</div>
-        <div className="professor-score" aria-label="課程綜合平均"><Gauge size={18} /><strong>{course.averageRating === null ? '—' : course.averageRating.toFixed(1)}</strong><span>/ 100 綜合平均 · {course.ratingCount} 人評分</span></div>
-        <dl className="professor-dimensions">
-          {ratingDimensions.map((dimension) => <div key={dimension.key}><dt>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</dt><dd>{course[dimension.averageKey] === null ? '—' : <><strong>{course[dimension.averageKey]!.toFixed(1)}</strong><small>/100</small></>}</dd></div>)}
-        </dl>
-        {ratingTargetId !== course.id && <button className="open-rating-button" type="button" onClick={() => openRating(course)}>評這門課</button>}
-        {ratingTargetId === course.id && <form className="rating-form" onSubmit={(event) => void submitRating(event, course)}>
-          <button className="rating-close" type="button" onClick={() => setRatingTargetId('')} aria-label="關閉評分"><X size={15} /></button>
-          {ratingDimensions.map((dimension) => <fieldset key={dimension.key}>
-            <legend>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</legend>
-            <div className="dimension-scale">
-              <input type="range" min="0" max="100" step="1" value={scores[dimension.key]} aria-label={`${course.name}的${dimension.label}分數`} aria-valuetext={`${scores[dimension.key]} 分`} onChange={(event) => updateScore(dimension.key, event.target.value)} />
-              <label><span className="sr-only">{dimension.label}分數</span><input type="number" inputMode="numeric" min="0" max="100" step="1" value={scores[dimension.key]} onChange={(event) => updateScore(dimension.key, event.target.value)} /><span>分</span></label>
-            </div>
-            <small><span>0 {dimension.low}</span><span>100 {dimension.high}</span></small>
-          </fieldset>)}
-          <button className="rating-submit" type="submit" disabled={submitting}>{submitting ? '送出中…' : <><Check size={14} />送出五項課程評分</>}</button>
-        </form>}
-      </article>)}
-    </section>
-    {!loading && courses.length > 0 && <div className="course-pagination"><span>已顯示 {courses.length}／{total} 門</span>{nextOffset !== null && <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? '載入中…' : '顯示更多課程'}</button>}</div>}
-    {submissionOpen && <div className="course-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSubmissionOpen(false); }}><form className="course-modal" role="dialog" aria-modal="true" aria-labelledby="course-modal-title" onSubmit={(event) => void submitCourse(event)}>
-      <button className="course-modal-close" type="button" onClick={() => setSubmissionOpen(false)} aria-label="關閉"><X size={17} /></button>
-      <p><Plus size={14} />新增課程</p><h2 id="course-modal-title">新增{school.shortName}課程</h2>
-      <label>學期<select value={courseSubmission.semester} onChange={(event) => setCourseSubmission((current) => ({ ...current, semester: event.target.value }))}><option value="1">上學期</option><option value="2">下學期</option></select></label>
-      <label>系所<select required value={courseSubmission.department} onChange={(event) => setCourseSubmission((current) => ({ ...current, department: event.target.value }))}><option value="">請選擇系所</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
-      <label>課程名稱<input required minLength={2} maxLength={100} value={courseSubmission.name} onChange={(event) => setCourseSubmission((current) => ({ ...current, name: event.target.value }))} placeholder="例如：資料結構" /></label>
-      <label>授課教師<input required minLength={2} maxLength={80} value={courseSubmission.instructorName} onChange={(event) => setCourseSubmission((current) => ({ ...current, instructorName: event.target.value }))} placeholder="請填寫教師全名" /></label>
-      <label>學校官方來源（選填）<input type="url" value={courseSubmission.officialSourceUrl} onChange={(event) => setCourseSubmission((current) => ({ ...current, officialSourceUrl: event.target.value }))} placeholder="https://該校官方網站/..." /></label>
-      <small>送出後，同學就能分享這門課的修課經驗。</small>
-      <button className="course-modal-submit" type="submit" disabled={submitting || departments.length === 0}>{submitting ? '送出中…' : '新增課程'}</button>
-    </form></div>}
-    <footer className="course-footer"><span>WZUNAA</span><nav><a href="/privacy">隱私權政策</a><a href="/terms">服務條款</a></nav></footer>
+    <div className="course-shell">
+      <header className="professor-topbar">
+        <a className="professor-brand" href="/courses" aria-label="WZUNAA 課程評分首頁"><span className="course-brand-mark">W</span><span>WZUNAA 課程評分</span></a>
+        <div className="course-header-actions">
+          {auth.user ? <small className="course-user-chip">{auth.user.name}</small> : <a className="course-login-button" href="/api/auth/google/start?returnTo=%2Fcourses"><LogIn size={14} />Google 登入</a>}
+          <button className="course-add-button" type="button" onClick={openSubmission}><Plus size={15} />新增課程</button>
+        </div>
+      </header>
+
+      <section className="professor-hero">
+        <div className="professor-hero-copy">
+          <p><Star size={14} fill="currentColor" />0–100 分課程評分</p>
+          <h1>{school.shortName}課程評分 <span aria-hidden="true">✦</span></h1>
+          <strong>五個面向，把每一門課的真實修課體感畫成一張卡。</strong>
+        </div>
+        <div className="professor-source-note">
+          <ShieldCheck size={17} />
+          <span>資料來源以學校公開課程頁為準；課程與授課教師仍可能依校方最新公告調整。</span>
+          <b>{loading ? '正在整理課程' : `${total.toLocaleString('zh-TW')} 門課程`}</b>
+        </div>
+      </section>
+
+      <section className="professor-controls" aria-label="課程篩選">
+        <label><span>學校</span><select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setSemester(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="course-search-field"><span><Search size={13} />搜尋課程、老師或系所</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="輸入關鍵字" /></label>
+        <label><span>系所</span><select value={department} onChange={(event) => setDepartment(event.target.value)}><option value="">全部系所（{departmentsLoading ? '…' : departments.length}）</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
+        <label><span>學期</span><select value={semester} onChange={(event) => setSemester(event.target.value)}><option value="">全部學期</option><option value="1">上學期</option><option value="2">下學期</option></select></label>
+      </section>
+
+      {message && <p className={`professor-message ${message === '評分已更新。' || message === '課程已新增。' ? 'is-success' : ''}`} role="status" aria-live="polite">{message}</p>}
+
+      <section className="professor-grid" aria-label="課程列表">
+        {loading && <div className="professor-empty"><span className="loading-dot" />載入中</div>}
+        {!loading && courses.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}目前沒有已收錄課程` : '目前沒有符合條件的課程'}</strong><span>只有能由官方課程頁與現職師資名錄同時核對的課程才會顯示。</span></div>}
+        {courses.map((course) => <article className={`professor-card ${ratingTargetId === course.id ? 'is-rating' : ''}`} data-tone={toneForDepartment(course.department)} key={course.id}>
+          <div className="course-card-meta"><span>{course.department || school.shortName}</span><small>{course.ratingCount} 人評分</small></div>
+          <div className="course-card-heading"><small>{course.semester === '1' ? '上學期' : '下學期'}{course.sourceType === 'user' ? ' · 使用者新增' : ''}</small><h2>{course.name}</h2></div>
+          <p className="course-instructors">授課：{course.instructors.map((instructor) => <span key={`${course.id}-${instructor.name}`}>{instructor.officialSourceUrl ? <a href={instructor.officialSourceUrl} target="_blank" rel="noreferrer">{instructor.name}<ExternalLink size={10} /></a> : instructor.name}</span>)}</p>
+          <div className="course-official-links">{course.officialSourceUrl && <a href={course.officialSourceUrl} target="_blank" rel="noreferrer">{course.sourceType === 'official' ? '官方課程資料' : '參考來源'}<ExternalLink size={11} /></a>}{course.departmentSourceUrl && <a href={course.departmentSourceUrl} target="_blank" rel="noreferrer">官方系所網站<ExternalLink size={11} /></a>}</div>
+          <div className="professor-score" aria-label="課程綜合平均"><span className="score-icon"><Gauge size={17} /></span><strong>{course.averageRating === null ? '—' : course.averageRating.toFixed(1)}</strong><span>/ 100 綜合平均</span></div>
+          <dl className="professor-dimensions">
+            {ratingDimensions.map((dimension) => {
+              const value = course[dimension.averageKey];
+              return <div key={dimension.key}><dt>{dimension.label}</dt><dd><span className="dimension-track" aria-hidden="true"><i style={{ width: `${value ?? 0}%` }} /></span><strong>{value === null ? '—' : value.toFixed(1)}</strong></dd></div>;
+            })}
+          </dl>
+          {ratingTargetId !== course.id && <button className="open-rating-button" type="button" onClick={() => openRating(course)}>評這門課 <span aria-hidden="true">→</span></button>}
+          {ratingTargetId === course.id && <form className="rating-form" onSubmit={(event) => void submitRating(event, course)}>
+            <div className="rating-form-heading"><span>你的五項評分</span><button className="rating-close" type="button" onClick={() => setRatingTargetId('')} aria-label="關閉評分"><X size={15} /></button></div>
+            {ratingDimensions.map((dimension) => <fieldset key={dimension.key}>
+              <legend>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</legend>
+              <div className="dimension-scale">
+                <input type="range" min="0" max="100" step="1" value={scores[dimension.key]} aria-label={`${course.name}的${dimension.label}分數`} aria-valuetext={`${scores[dimension.key]} 分`} onChange={(event) => updateScore(dimension.key, event.target.value)} />
+                <label><span className="sr-only">{dimension.label}分數</span><input type="number" inputMode="numeric" min="0" max="100" step="1" value={scores[dimension.key]} onChange={(event) => updateScore(dimension.key, event.target.value)} /><span>分</span></label>
+              </div>
+              <small><span>0 {dimension.low}</span><span>100 {dimension.high}</span></small>
+            </fieldset>)}
+            <button className="rating-submit" type="submit" disabled={submitting}>{submitting ? '送出中…' : <><Check size={14} />送出五項課程評分</>}</button>
+          </form>}
+        </article>)}
+      </section>
+
+      {!loading && courses.length > 0 && <div className="course-pagination"><span>已顯示 {courses.length}／{total} 門</span>{nextOffset !== null && <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? '載入中…' : '顯示更多課程'}</button>}</div>}
+
+      {submissionOpen && <div className="course-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSubmissionOpen(false); }}><form className="course-modal" role="dialog" aria-modal="true" aria-labelledby="course-modal-title" onSubmit={(event) => void submitCourse(event)}>
+        <button className="course-modal-close" type="button" onClick={() => setSubmissionOpen(false)} aria-label="關閉"><X size={17} /></button>
+        <p><Plus size={14} />新增課程</p><h2 id="course-modal-title">新增{school.shortName}課程</h2>
+        <label>學期<select value={courseSubmission.semester} onChange={(event) => setCourseSubmission((current) => ({ ...current, semester: event.target.value }))}><option value="1">上學期</option><option value="2">下學期</option></select></label>
+        <label>系所<select required value={courseSubmission.department} onChange={(event) => setCourseSubmission((current) => ({ ...current, department: event.target.value }))}><option value="">請選擇系所</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
+        <label>課程名稱<input required minLength={2} maxLength={100} value={courseSubmission.name} onChange={(event) => setCourseSubmission((current) => ({ ...current, name: event.target.value }))} placeholder="例如：資料結構" /></label>
+        <label>授課教師<input required minLength={2} maxLength={80} value={courseSubmission.instructorName} onChange={(event) => setCourseSubmission((current) => ({ ...current, instructorName: event.target.value }))} placeholder="請填寫教師全名" /></label>
+        <label>學校官方來源（選填）<input type="url" value={courseSubmission.officialSourceUrl} onChange={(event) => setCourseSubmission((current) => ({ ...current, officialSourceUrl: event.target.value }))} placeholder="https://該校官方網站/..." /></label>
+        <small>送出後，同學就能分享這門課的修課經驗。</small>
+        <button className="course-modal-submit" type="submit" disabled={submitting || departments.length === 0}>{submitting ? '送出中…' : '新增課程'}</button>
+      </form></div>}
+      <footer className="course-footer"><span>WZUNAA</span><nav><a href="/privacy">隱私權政策</a><a href="/terms">服務條款</a></nav></footer>
+    </div>
   </main>;
 }
