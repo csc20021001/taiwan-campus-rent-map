@@ -1,7 +1,9 @@
 export function validateCourseRating(body) {
   const fields = [
+    ['learningScore', 'learning_score', '學習收穫'],
     ['workloadScore', 'workload_score', '作業量'],
     ['examDifficultyScore', 'exam_difficulty_score', '考試難度'],
+    ['gradingStandardScore', 'grading_standard_score', '給分標準'],
     ['attendanceFrequencyScore', 'attendance_frequency_score', '點名頻率'],
   ];
   const value = {};

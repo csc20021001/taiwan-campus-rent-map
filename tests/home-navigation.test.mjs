@@ -13,7 +13,7 @@ test('homepage immediately opens the course directory', () => {
 test('course header no longer links back to rental features', () => {
   assert.match(courseDirectory, /WZUNAA 課程評分/);
   assert.match(courseDirectory, /新增課程/);
-  assert.match(courseDirectory, /三項課程評分/);
+  assert.match(courseDirectory, /五項課程評分/);
   assert.doesNotMatch(courseDirectory, /回租屋地圖|href="\/rentals"/);
 });
 

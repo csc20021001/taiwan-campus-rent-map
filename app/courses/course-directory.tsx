@@ -17,8 +17,10 @@ type Course = {
   sourceType: 'official' | 'user';
   instructors: Array<{ name: string; officialSourceUrl: string }>;
   averageRating: number | null;
+  averageLearning: number | null;
   averageWorkload: number | null;
   averageExamDifficulty: number | null;
+  averageGradingStandard: number | null;
   averageAttendanceFrequency: number | null;
   ratingCount: number;
 };
@@ -33,11 +35,19 @@ type Department = {
 };
 
 type AuthState = { user: { id: string; name: string } | null; googleConfigured: boolean };
-type RatingScores = { workloadScore: number; examDifficultyScore: number; attendanceFrequencyScore: number };
+type RatingScores = {
+  learningScore: number;
+  workloadScore: number;
+  examDifficultyScore: number;
+  gradingStandardScore: number;
+  attendanceFrequencyScore: number;
+};
 
 const initialScores: RatingScores = {
+  learningScore: 50,
   workloadScore: 50,
   examDifficultyScore: 50,
+  gradingStandardScore: 50,
   attendanceFrequencyScore: 50,
 };
 
@@ -47,10 +57,12 @@ const ratingDimensions: Array<{
   low: string;
   high: string;
   hint?: string;
-  averageKey: keyof Pick<Course, 'averageWorkload' | 'averageExamDifficulty' | 'averageAttendanceFrequency'>;
+  averageKey: keyof Pick<Course, 'averageLearning' | 'averageWorkload' | 'averageExamDifficulty' | 'averageGradingStandard' | 'averageAttendanceFrequency'>;
 }> = [
+  { key: 'learningScore', label: '學習收穫', low: '較少', high: '很多', hint: '越高代表越能學到東西', averageKey: 'averageLearning' },
   { key: 'workloadScore', label: '作業量', low: '很少', high: '很多', hint: '越高代表作業越多', averageKey: 'averageWorkload' },
   { key: 'examDifficultyScore', label: '考試難度', low: '較容易', high: '很困難', hint: '越高代表考試越難', averageKey: 'averageExamDifficulty' },
+  { key: 'gradingStandardScore', label: '給分標準', low: '較嚴格', high: '較寬鬆', hint: '越高代表給分越寬鬆', averageKey: 'averageGradingStandard' },
   { key: 'attendanceFrequencyScore', label: '點名頻率', low: '很少', high: '很頻繁', hint: '越高代表越常點名', averageKey: 'averageAttendanceFrequency' },
 ];
 
@@ -215,7 +227,7 @@ export function CourseDirectory() {
 
   return <main className="professor-page">
     <header className="professor-topbar"><span className="professor-brand"><GraduationCap size={18} />WZUNAA 課程評分</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fcourses"><LogIn size={14} />Google 登入</a>}</header>
-    <section className="professor-hero"><p><Star size={14} fill="currentColor" />0–100 分課程評分</p><h1>{school.shortName}課程評分</h1><span>以課程與授課教師為單位，查看作業量、考試難度與點名頻率</span><button className="course-add-button" type="button" onClick={openSubmission}><Plus size={15} />新增課程</button></section>
+    <section className="professor-hero"><p><Star size={14} fill="currentColor" />0–100 分課程評分</p><h1>{school.shortName}課程評分</h1><span>以課程與授課教師為單位，查看學習收穫、作業量、考試難度、給分標準與點名頻率</span><button className="course-add-button" type="button" onClick={openSubmission}><Plus size={15} />新增課程</button></section>
     <p className="professor-source-note"><ShieldCheck size={14} />資料來源以學校公開課程頁為準；課程與授課教師仍可能依校方最新公告調整。</p>
     <section className="professor-controls">
       <label>學校<select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setSemester(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -231,7 +243,7 @@ export function CourseDirectory() {
         <small>{course.semester === '1' ? '上學期' : '下學期'}{course.sourceType === 'user' ? ' · 使用者新增' : ''}</small><h2>{course.name}</h2>
         <p className="course-instructors">授課：{course.instructors.map((instructor) => <span key={`${course.id}-${instructor.name}`}>{instructor.officialSourceUrl ? <a href={instructor.officialSourceUrl} target="_blank" rel="noreferrer">{instructor.name}<ExternalLink size={10} /></a> : instructor.name}</span>)}</p>
         <div className="course-official-links">{course.officialSourceUrl && <a href={course.officialSourceUrl} target="_blank" rel="noreferrer">{course.sourceType === 'official' ? '官方課程資料' : '參考來源'}<ExternalLink size={11} /></a>}{course.departmentSourceUrl && <a href={course.departmentSourceUrl} target="_blank" rel="noreferrer">官方系所網站<ExternalLink size={11} /></a>}</div>
-        <div className="professor-score" aria-label="課程綜合強度"><Gauge size={18} /><strong>{course.averageRating === null ? '—' : course.averageRating.toFixed(1)}</strong><span>/ 100 綜合強度 · {course.ratingCount} 人評分</span></div>
+        <div className="professor-score" aria-label="課程綜合平均"><Gauge size={18} /><strong>{course.averageRating === null ? '—' : course.averageRating.toFixed(1)}</strong><span>/ 100 綜合平均 · {course.ratingCount} 人評分</span></div>
         <dl className="professor-dimensions">
           {ratingDimensions.map((dimension) => <div key={dimension.key}><dt>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</dt><dd>{course[dimension.averageKey] === null ? '—' : <><strong>{course[dimension.averageKey]!.toFixed(1)}</strong><small>/100</small></>}</dd></div>)}
         </dl>
@@ -246,7 +258,7 @@ export function CourseDirectory() {
             </div>
             <small><span>0 {dimension.low}</span><span>100 {dimension.high}</span></small>
           </fieldset>)}
-          <button className="rating-submit" type="submit" disabled={submitting}>{submitting ? '送出中…' : <><Check size={14} />送出三項課程評分</>}</button>
+          <button className="rating-submit" type="submit" disabled={submitting}>{submitting ? '送出中…' : <><Check size={14} />送出五項課程評分</>}</button>
         </form>}
       </article>)}
     </section>

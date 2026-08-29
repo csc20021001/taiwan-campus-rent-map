@@ -10,9 +10,11 @@ test('course instructors use full public names without masking', () => {
   assert.doesNotMatch(courseDirectory, /maskProfessorName|○/);
 });
 
-test('course UI explains all three rating directions', () => {
+test('course UI explains all five rating directions', () => {
+  assert.match(courseDirectory, /越高代表越能學到東西/);
   assert.match(courseDirectory, /越高代表作業越多/);
   assert.match(courseDirectory, /越高代表考試越難/);
+  assert.match(courseDirectory, /越高代表給分越寬鬆/);
   assert.match(courseDirectory, /越高代表越常點名/);
-  assert.match(courseDirectory, /送出三項課程評分/);
+  assert.match(courseDirectory, /送出五項課程評分/);
 });

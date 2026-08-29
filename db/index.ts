@@ -7,7 +7,7 @@ import { departmentSeeds } from './department-seeds';
 const activeUniversityIds = new Set(universities.map((school) => school.id));
 
 let databaseReady: Promise<void> | null = null;
-const runtimeSchemaVersion = '2026-08-29-course-rating-100-v1';
+const runtimeSchemaVersion = '2026-08-29-course-rating-five-dimensions-v1';
 
 export function getD1() {
   if (!env.DB) throw new Error('Cloudflare D1 binding `DB` is unavailable.');
@@ -98,6 +98,43 @@ async function ensureCourseHistoryColumns() {
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_identity ON courses(university_id, term, course_code)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_university_semester ON courses(university_id, semester, department, name)'),
   ]);
+}
+
+async function ensureCourseRatingDimensions() {
+  const db = getD1();
+  const tableInfo = await db.prepare('PRAGMA table_info(course_ratings)').all<{ name: string }>();
+  if (tableInfo.results.length === 0) return;
+  const existing = new Set(tableInfo.results.map((column) => column.name));
+  const currentBaseColumns = ['instructor_name', 'workload_score', 'exam_difficulty_score', 'attendance_frequency_score'];
+  if (!currentBaseColumns.every((column) => existing.has(column))) return;
+
+  const additions = [
+    ['learning_score', `ALTER TABLE course_ratings ADD COLUMN learning_score INTEGER CHECK (
+      learning_score IS NULL OR (typeof(learning_score) = 'integer' AND learning_score BETWEEN 0 AND 100)
+    )`],
+    ['grading_standard_score', `ALTER TABLE course_ratings ADD COLUMN grading_standard_score INTEGER CHECK (
+      grading_standard_score IS NULL OR (typeof(grading_standard_score) = 'integer' AND grading_standard_score BETWEEN 0 AND 100)
+    )`],
+  ] as const;
+  for (const [column, sql] of additions) {
+    if (!existing.has(column)) await db.prepare(sql).run();
+  }
+
+  const legacyTable = await db.prepare(`SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name = 'course_ratings_legacy_1_to_5'`).first<{ name: string }>();
+  if (legacyTable) {
+    await db.prepare(`UPDATE course_ratings
+      SET
+        learning_score = COALESCE(learning_score, (
+          SELECT legacy.learning_score * 20 FROM course_ratings_legacy_1_to_5 AS legacy
+          WHERE legacy.id = course_ratings.id
+        )),
+        grading_standard_score = COALESCE(grading_standard_score, (
+          SELECT legacy.grading_standard_score * 20 FROM course_ratings_legacy_1_to_5 AS legacy
+          WHERE legacy.id = course_ratings.id
+        ))
+      WHERE learning_score IS NULL OR grading_standard_score IS NULL`).run();
+  }
 }
 
 async function ensureUnifiedProfessorIdentities() {
@@ -248,8 +285,10 @@ async function initializeCoreTables() {
       course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       instructor_name TEXT NOT NULL,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      learning_score INTEGER CHECK (learning_score IS NULL OR (typeof(learning_score) = 'integer' AND learning_score BETWEEN 0 AND 100)),
       workload_score INTEGER NOT NULL CHECK (typeof(workload_score) = 'integer' AND workload_score BETWEEN 0 AND 100),
       exam_difficulty_score INTEGER NOT NULL CHECK (typeof(exam_difficulty_score) = 'integer' AND exam_difficulty_score BETWEEN 0 AND 100),
+      grading_standard_score INTEGER CHECK (grading_standard_score IS NULL OR (typeof(grading_standard_score) = 'integer' AND grading_standard_score BETWEEN 0 AND 100)),
       attendance_frequency_score INTEGER CHECK (attendance_frequency_score IS NULL OR (typeof(attendance_frequency_score) = 'integer' AND attendance_frequency_score BETWEEN 0 AND 100)),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -272,6 +311,7 @@ async function initializeCoreTables() {
   await ensureProfessorOfficialSourceUrl();
   await ensureProfessorRatingDimensions();
   await ensureCourseHistoryColumns();
+  await ensureCourseRatingDimensions();
   await ensureUnifiedProfessorIdentities();
   await db.batch([
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_departments_identity ON academic_departments(university_id, name)'),

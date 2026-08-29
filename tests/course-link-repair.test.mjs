@@ -13,7 +13,9 @@ test('course link repair is update-only, complete, and executable', () => {
   assert.equal((migration.match(/^UPDATE academic_departments SET official_source_url/gm) ?? []).length, 827);
   assert.doesNotMatch(migration, /\bDELETE\b|\bDROP\b/);
   assert.match(migration, /2026-08-29-course-links-v1/);
-  assert.match(runtime, /runtimeSchemaVersion = '2026-08-29-course-rating-100-v1'/);
+  assert.match(runtime, /runtimeSchemaVersion = '2026-08-29-course-rating-five-dimensions-v1'/);
+  assert.match(runtime, /async function ensureCourseRatingDimensions\(\)/);
+  assert.match(runtime, /course_ratings_legacy_1_to_5/);
 
   const database = new DatabaseSync(':memory:');
   database.exec(`
