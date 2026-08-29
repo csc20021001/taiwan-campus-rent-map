@@ -17,6 +17,13 @@ test('course header no longer links back to rental features', () => {
   assert.doesNotMatch(courseDirectory, /回租屋地圖|href="\/rentals"/);
 });
 
+test('course directory waits for each visitor to choose a university', () => {
+  assert.match(courseDirectory, /const \[schoolId, setSchoolId\] = useState\(''\)/);
+  assert.match(courseDirectory, /<option value="">請選擇學校<\/option>/);
+  assert.match(courseDirectory, /!schoolId && <div className="professor-empty professor-school-prompt"/);
+  assert.doesNotMatch(courseDirectory, /useState\('ntu'\)/);
+});
+
 test('rental page and APIs are removed from the application', () => {
   for (const path of [
     '../app/rentals/page.tsx',

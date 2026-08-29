@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Check, ExternalLink, Gauge, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ExternalLink, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
 import { universities } from '@/app/data';
 
 type Course = {
@@ -16,7 +16,6 @@ type Course = {
   departmentSourceUrl: string;
   sourceType: 'official' | 'user';
   instructors: Array<{ name: string; officialSourceUrl: string }>;
-  averageRating: number | null;
   averageLearning: number | null;
   averageWorkload: number | null;
   averageExamDifficulty: number | null;
@@ -73,25 +72,26 @@ function toneForDepartment(department: string) {
 }
 
 export function CourseDirectory() {
-  const [schoolId, setSchoolId] = useState('ntu');
+  const [schoolId, setSchoolId] = useState('');
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
   const [semester, setSemester] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [auth, setAuth] = useState<AuthState>({ user: null, googleConfigured: false });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
-  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [ratingTargetId, setRatingTargetId] = useState('');
   const [scores, setScores] = useState<RatingScores>(initialScores);
   const [submitting, setSubmitting] = useState(false);
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [courseSubmission, setCourseSubmission] = useState({ semester: '1', department: '', name: '', instructorName: '', officialSourceUrl: '' });
-  const school = universities.find((item) => item.id === schoolId) ?? universities[0];
+  const courseRequestVersion = useRef(0);
+  const school = universities.find((item) => item.id === schoolId);
 
   useEffect(() => {
     fetch('/api/auth/session', { cache: 'no-store' })
@@ -101,17 +101,27 @@ export function CourseDirectory() {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/departments?university_id=${encodeURIComponent(schoolId)}`)
+    if (!schoolId) return;
+    const controller = new AbortController();
+    fetch(`/api/departments?university_id=${encodeURIComponent(schoolId)}`, { signal: controller.signal })
       .then(async (response) => {
         const data = await response.json() as { departments?: Department[]; error?: string };
         if (!response.ok) throw new Error(data.error || '系所資料載入失敗');
         setDepartments(data.departments ?? []);
       })
-      .catch((caught) => { setDepartments([]); setMessage(caught instanceof Error ? caught.message : '系所資料載入失敗'); })
-      .finally(() => setDepartmentsLoading(false));
+      .catch((caught) => {
+        if (controller.signal.aborted) return;
+        setDepartments([]);
+        setMessage(caught instanceof Error ? caught.message : '系所資料載入失敗');
+      })
+      .finally(() => { if (!controller.signal.aborted) setDepartmentsLoading(false); });
+    return () => controller.abort();
   }, [schoolId]);
 
   useEffect(() => {
+    const requestVersion = ++courseRequestVersion.current;
+    if (!schoolId) return;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoading(true);
       const params = new URLSearchParams({ university_id: schoolId });
@@ -120,23 +130,34 @@ export function CourseDirectory() {
       if (semester) params.set('semester', semester);
       params.set('limit', '36');
       params.set('offset', '0');
-      fetch(`/api/courses?${params}`)
+      fetch(`/api/courses?${params}`, { signal: controller.signal })
         .then(async (response) => {
           const data = await response.json() as { courses?: Course[]; total?: number; nextOffset?: number | null; error?: string };
           if (!response.ok) throw new Error(data.error || '課程資料載入失敗');
+          if (requestVersion !== courseRequestVersion.current) return;
           setCourses(data.courses ?? []);
           setTotal(data.total ?? 0);
           setNextOffset(data.nextOffset ?? null);
           setMessage('');
         })
-        .catch((caught) => { setCourses([]); setTotal(0); setNextOffset(null); setMessage(caught instanceof Error ? caught.message : '課程資料載入失敗'); })
-        .finally(() => setLoading(false));
+        .catch((caught) => {
+          if (controller.signal.aborted || requestVersion !== courseRequestVersion.current) return;
+          setCourses([]);
+          setTotal(0);
+          setNextOffset(null);
+          setMessage(caught instanceof Error ? caught.message : '課程資料載入失敗');
+        })
+        .finally(() => { if (!controller.signal.aborted && requestVersion === courseRequestVersion.current) setLoading(false); });
     }, 220);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [department, schoolId, search, semester]);
 
   async function loadMore() {
-    if (nextOffset === null || loadingMore) return;
+    if (!schoolId || nextOffset === null || loadingMore) return;
+    const requestVersion = courseRequestVersion.current;
     setLoadingMore(true);
     try {
       const params = new URLSearchParams({ university_id: schoolId, limit: '36', offset: String(nextOffset) });
@@ -146,13 +167,15 @@ export function CourseDirectory() {
       const response = await fetch(`/api/courses?${params}`);
       const data = await response.json() as { courses?: Course[]; total?: number; nextOffset?: number | null; error?: string };
       if (!response.ok) throw new Error(data.error || '課程資料載入失敗');
+      if (requestVersion !== courseRequestVersion.current) return;
       setCourses((current) => [...current, ...(data.courses ?? [])]);
       setTotal(data.total ?? total);
       setNextOffset(data.nextOffset ?? null);
     } catch (caught) {
+      if (requestVersion !== courseRequestVersion.current) return;
       setMessage(caught instanceof Error ? caught.message : '課程資料載入失敗');
     } finally {
-      setLoadingMore(false);
+      if (requestVersion === courseRequestVersion.current) setLoadingMore(false);
     }
   }
 
@@ -200,6 +223,10 @@ export function CourseDirectory() {
   }
 
   function openSubmission() {
+    if (!schoolId) {
+      setMessage('請先選擇學校。');
+      return;
+    }
     if (!auth.user) {
       window.location.assign(`/api/auth/google/start?returnTo=${encodeURIComponent('/courses')}`);
       return;
@@ -211,6 +238,11 @@ export function CourseDirectory() {
 
   async function submitCourse(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!schoolId) {
+      setSubmissionOpen(false);
+      setMessage('請先選擇學校。');
+      return;
+    }
     setSubmitting(true);
     setMessage('');
     try {
@@ -231,47 +263,66 @@ export function CourseDirectory() {
     }
   }
 
+  function selectSchool(value: string) {
+    courseRequestVersion.current += 1;
+    setSchoolId(value);
+    setSearch('');
+    setDepartment('');
+    setSemester('');
+    setDepartments([]);
+    setCourses([]);
+    setTotal(0);
+    setNextOffset(null);
+    setLoadingMore(false);
+    setRatingTargetId('');
+    setSubmissionOpen(false);
+    setCourseSubmission({ semester: '1', department: '', name: '', instructorName: '', officialSourceUrl: '' });
+    setMessage('');
+    setDepartmentsLoading(Boolean(value));
+    setLoading(Boolean(value));
+  }
+
   return <main className="professor-page">
     <div className="course-shell">
       <header className="professor-topbar">
         <a className="professor-brand" href="/courses" aria-label="WZUNAA 課程評分首頁"><span className="course-brand-mark">W</span><span>WZUNAA 課程評分</span></a>
         <div className="course-header-actions">
           {auth.user ? <small className="course-user-chip">{auth.user.name}</small> : <a className="course-login-button" href="/api/auth/google/start?returnTo=%2Fcourses"><LogIn size={14} />Google 登入</a>}
-          <button className="course-add-button" type="button" onClick={openSubmission}><Plus size={15} />新增課程</button>
+          <button className="course-add-button" type="button" onClick={openSubmission} disabled={!schoolId} title={schoolId ? undefined : '請先選擇學校'}><Plus size={15} />新增課程</button>
         </div>
       </header>
 
       <section className="professor-hero">
         <div className="professor-hero-copy">
           <p><Star size={14} fill="currentColor" />0–100 分課程評分</p>
-          <h1>{school.shortName}課程評分 <span aria-hidden="true">✦</span></h1>
-          <strong>五個面向，把每一門課的真實修課體感畫成一張卡。</strong>
+          <h1>{school ? `${school.shortName}課程評分` : '先選擇一間學校'} <span aria-hidden="true">✦</span></h1>
+          <strong>{school ? '五個面向，把每一門課的真實修課體感畫成一張卡。' : '從下方選擇學校，開始查詢課程與修課評價。'}</strong>
         </div>
         <div className="professor-source-note">
           <ShieldCheck size={17} />
           <span>資料來源以學校公開課程頁為準；課程與授課教師仍可能依校方最新公告調整。</span>
-          <b>{loading ? '正在整理課程' : `${total.toLocaleString('zh-TW')} 門課程`}</b>
+          <b>{!school ? '等待選校' : loading ? '正在整理課程' : `${total.toLocaleString('zh-TW')} 門課程`}</b>
         </div>
       </section>
 
       <section className="professor-controls" aria-label="課程篩選">
-        <label><span>學校</span><select value={schoolId} onChange={(event) => { setDepartmentsLoading(true); setSchoolId(event.target.value); setDepartment(''); setSemester(''); setRatingTargetId(''); }}>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="course-search-field"><span><Search size={13} />搜尋課程、老師或系所</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="輸入關鍵字" /></label>
-        <label><span>系所</span><select value={department} onChange={(event) => setDepartment(event.target.value)}><option value="">全部系所（{departmentsLoading ? '…' : departments.length}）</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
-        <label><span>學期</span><select value={semester} onChange={(event) => setSemester(event.target.value)}><option value="">全部學期</option><option value="1">上學期</option><option value="2">下學期</option></select></label>
+        <label><span>學校</span><select value={schoolId} onChange={(event) => selectSchool(event.target.value)}><option value="">請選擇學校</option>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="course-search-field"><span><Search size={13} />搜尋課程、老師或系所</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={schoolId ? '輸入關鍵字' : '請先選擇學校'} disabled={!schoolId} /></label>
+        <label><span>系所</span><select value={department} onChange={(event) => setDepartment(event.target.value)} disabled={!schoolId}><option value="">{schoolId ? `全部系所（${departmentsLoading ? '…' : departments.length}）` : '請先選擇學校'}</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
+        <label><span>學期</span><select value={semester} onChange={(event) => setSemester(event.target.value)} disabled={!schoolId}><option value="">{schoolId ? '全部學期' : '請先選擇學校'}</option><option value="1">上學期</option><option value="2">下學期</option></select></label>
       </section>
 
       {message && <p className={`professor-message ${message === '評分已更新。' || message === '課程已新增。' ? 'is-success' : ''}`} role="status" aria-live="polite">{message}</p>}
 
-      <section className="professor-grid" aria-label="課程列表">
-        {loading && <div className="professor-empty"><span className="loading-dot" />載入中</div>}
-        {!loading && courses.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}目前沒有已收錄課程` : '目前沒有符合條件的課程'}</strong><span>只有能由官方課程頁與現職師資名錄同時核對的課程才會顯示。</span></div>}
+      <section className="professor-grid" aria-label="課程列表" aria-busy={loading}>
+        {!schoolId && <div className="professor-empty professor-school-prompt"><GraduationCap size={30} /><strong>請先選擇學校</strong><span>選好學校後，這裡會顯示該校的課程與五項評分。</span></div>}
+        {schoolId && loading && <div className="professor-empty"><span className="loading-dot" />載入中</div>}
+        {schoolId && !loading && courses.length === 0 && <div className="professor-empty"><GraduationCap size={28} /><strong>{department ? `${department}目前沒有已收錄課程` : '目前沒有符合條件的課程'}</strong><span>只有能由官方課程頁與現職師資名錄同時核對的課程才會顯示。</span></div>}
         {courses.map((course) => <article className={`professor-card ${ratingTargetId === course.id ? 'is-rating' : ''}`} data-tone={toneForDepartment(course.department)} key={course.id}>
-          <div className="course-card-meta"><span>{course.department || school.shortName}</span><small>{course.ratingCount} 人評分</small></div>
+          <div className="course-card-meta"><span>{course.department || school?.shortName || '未分類'}</span><small>{course.ratingCount} 人評分</small></div>
           <div className="course-card-heading"><small>{course.semester === '1' ? '上學期' : '下學期'}{course.sourceType === 'user' ? ' · 使用者新增' : ''}</small><h2>{course.name}</h2></div>
           <p className="course-instructors">授課：{course.instructors.map((instructor) => <span key={`${course.id}-${instructor.name}`}>{instructor.officialSourceUrl ? <a href={instructor.officialSourceUrl} target="_blank" rel="noreferrer">{instructor.name}<ExternalLink size={10} /></a> : instructor.name}</span>)}</p>
           <div className="course-official-links">{course.officialSourceUrl && <a href={course.officialSourceUrl} target="_blank" rel="noreferrer">{course.sourceType === 'official' ? '官方課程資料' : '參考來源'}<ExternalLink size={11} /></a>}{course.departmentSourceUrl && <a href={course.departmentSourceUrl} target="_blank" rel="noreferrer">官方系所網站<ExternalLink size={11} /></a>}</div>
-          <div className="professor-score" aria-label="課程綜合平均"><span className="score-icon"><Gauge size={17} /></span><strong>{course.averageRating === null ? '—' : course.averageRating.toFixed(1)}</strong><span>/ 100 綜合平均</span></div>
           <dl className="professor-dimensions">
             {ratingDimensions.map((dimension) => {
               const value = course[dimension.averageKey];
@@ -294,11 +345,11 @@ export function CourseDirectory() {
         </article>)}
       </section>
 
-      {!loading && courses.length > 0 && <div className="course-pagination"><span>已顯示 {courses.length}／{total} 門</span>{nextOffset !== null && <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? '載入中…' : '顯示更多課程'}</button>}</div>}
+      {schoolId && !loading && courses.length > 0 && <div className="course-pagination"><span>已顯示 {courses.length}／{total} 門</span>{nextOffset !== null && <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? '載入中…' : '顯示更多課程'}</button>}</div>}
 
       {submissionOpen && <div className="course-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSubmissionOpen(false); }}><form className="course-modal" role="dialog" aria-modal="true" aria-labelledby="course-modal-title" onSubmit={(event) => void submitCourse(event)}>
         <button className="course-modal-close" type="button" onClick={() => setSubmissionOpen(false)} aria-label="關閉"><X size={17} /></button>
-        <p><Plus size={14} />新增課程</p><h2 id="course-modal-title">新增{school.shortName}課程</h2>
+        <p><Plus size={14} />新增課程</p><h2 id="course-modal-title">新增{school?.shortName ?? ''}課程</h2>
         <label>學期<select value={courseSubmission.semester} onChange={(event) => setCourseSubmission((current) => ({ ...current, semester: event.target.value }))}><option value="1">上學期</option><option value="2">下學期</option></select></label>
         <label>系所<select required value={courseSubmission.department} onChange={(event) => setCourseSubmission((current) => ({ ...current, department: event.target.value }))}><option value="">請選擇系所</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
         <label>課程名稱<input required minLength={2} maxLength={100} value={courseSubmission.name} onChange={(event) => setCourseSubmission((current) => ({ ...current, name: event.target.value }))} placeholder="例如：資料結構" /></label>

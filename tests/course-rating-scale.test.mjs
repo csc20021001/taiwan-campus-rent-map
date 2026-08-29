@@ -203,10 +203,9 @@ test('runtime fallback safely upgrades the teacher-specific 1–5 table from mig
   database.close();
 });
 
-test('course interface presents editable 0–100 controls and 100-point averages', () => {
+test('course interface presents five editable 0–100 controls without a combined score', () => {
   const source = readFileSync(new URL('../app/courses/course-directory.tsx', import.meta.url), 'utf8');
   assert.match(source, /min="0" max="100" step="1"/);
-  assert.match(source, /\/ 100/);
   assert.match(source, /0–100 分課程評分/);
   assert.match(source, /label: '學習收穫'/);
   assert.match(source, /label: '作業量'/);
@@ -214,5 +213,6 @@ test('course interface presents editable 0–100 controls and 100-point averages
   assert.match(source, /label: '給分標準'/);
   assert.match(source, /label: '點名頻率'/);
   assert.match(source, /送出五項課程評分/);
+  assert.doesNotMatch(source, /averageRating|綜合分數|綜合平均/);
   assert.doesNotMatch(source, /\[1, 2, 3, 4, 5\]/);
 });
