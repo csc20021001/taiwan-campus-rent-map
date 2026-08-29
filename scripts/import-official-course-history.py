@@ -7,10 +7,12 @@ Raw downloads are cached outside the application bundle in .course-cache.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
 import concurrent.futures
 import http.cookiejar
+import io
 import json
 import re
 import ssl
@@ -19,6 +21,7 @@ import tarfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -68,7 +71,7 @@ COURSE_SOURCE_STATUS = {
     "nsysu": {"status": "restricted", "officialIndex": "https://selcrs.nsysu.edu.tw/menu1/CourseQuery.asp?HIS=1&eng=0", "note": "官方歷史查詢要求人工驗證碼，未繞過"},
     "ntust": {"status": "pending", "officialIndex": "https://querycourse.ntust.edu.tw/querycourse/", "note": "官方舊課程查詢可用，待完成 API 匯入"},
     "ntut": {"status": "imported", "officialIndex": "https://aps.ntut.edu.tw/course/tw/QueryCurrPage.jsp", "note": "官方逐學期、逐開課單位歷史查詢"},
-    "niu": {"status": "department-only", "officialIndex": "https://academic.niu.edu.tw/", "note": "尚未找到校級可機讀歷史清單；僅接受各系官方頁"},
+    "niu": {"status": "imported", "officialIndex": "https://academic.niu.edu.tw/p/403-1003-117-1.php", "note": "校級公開課表可逐學期匯出；目前匯入 106 至 115-1"},
 }
 
 LEGACY_COURSE_IDS = {
@@ -210,7 +213,7 @@ def split_instructors(value: object) -> list[str]:
     result = []
     for item in raw:
         name = normalize_name(item)
-        if not name or re.search(r"[A-Za-z]", name) or re.search(r"課程|系所|學程|中心|學院|授課|登入", name) or name in {"指導教授", "合授教師", "未定", "待聘", "無"}:
+        if not name or re.search(r"[A-Za-z]", name) or re.search(r"課程|系所|學程|中心|學院|授課|登入|教師", name) or name in {"指導教授", "合授教師", "未定", "待聘", "無"}:
             continue
         if 2 <= len(name) <= 8 and name not in result:
             result.append(name)
@@ -736,6 +739,225 @@ def parse_ntut(active: dict[str, dict], report: dict) -> list[dict]:
     return parsed
 
 
+class NiuFormParser(HTMLParser):
+    """Collect enough ASP.NET form state to request NIU's public Excel export."""
+
+    def __init__(self):
+        super().__init__()
+        self.inputs: list[dict[str, str]] = []
+        self.selects: dict[str, list[dict[str, object]]] = {}
+        self.current_select: str | None = None
+        self.current_option: dict[str, object] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "input":
+            self.inputs.append(attributes)
+        elif tag == "select":
+            self.current_select = attributes.get("name")
+            if self.current_select:
+                self.selects[self.current_select] = []
+        elif tag == "option" and self.current_select:
+            self.current_option = {"attrs": attributes, "text": []}
+            self.selects[self.current_select].append(self.current_option)
+
+    def handle_data(self, data):
+        if self.current_option is not None:
+            self.current_option["text"].append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "option":
+            self.current_option = None
+        elif tag == "select":
+            self.current_select = None
+
+    def parameters(self) -> dict[str, str]:
+        result = {}
+        for attrs in self.inputs:
+            name = attrs.get("name")
+            if name and attrs.get("type", "text").lower() in {"hidden", "text"}:
+                result[name] = attrs.get("value", "")
+        for name, options in self.selects.items():
+            selected = next((option for option in options if "selected" in option["attrs"]), None)
+            selected = selected or (options[0] if options else None)
+            result[name] = str(selected["attrs"].get("value", "")) if selected else ""
+        return result
+
+    def programs(self) -> dict[str, str]:
+        result = {}
+        for option in self.selects.get("Q_FACULTY_CODE", []):
+            code = normalize_space(option["attrs"].get("value", ""))
+            label = normalize_space("".join(option["text"]))
+            if code and label:
+                result[code] = re.sub(rf"^{re.escape(code)}\s*[-－]\s*", "", label)
+        return result
+
+
+def niu_term_urls(year: int, semester: int) -> tuple[str, str]:
+    raw_term = f"{year}{semester}"
+    path = f"/Application/TKE/TKE50/TKE5010_01.aspx?ayearsms={raw_term}"
+    encoded = base64.b64encode(path.encode("utf-16le")).decode("ascii")
+    outside = official_url("niu", f"https://acade.niu.edu.tw/NIU/outside.aspx?mainPage={encoded}")
+    main = official_url("niu", f"https://acade.niu.edu.tw/NIU{path}")
+    return outside, main
+
+
+class NiuCourseFetcher:
+    def fetch(self, year: int, semester: int) -> tuple[bytes, dict[str, str], str]:
+        CACHE.mkdir(exist_ok=True)
+        raw_term = f"{year}{semester}"
+        workbook_path = CACHE / f"niu-{raw_term}.xls"
+        programs_path = CACHE / f"niu-{raw_term}-programs.json"
+        outside, main = niu_term_urls(year, semester)
+        if workbook_path.exists() and workbook_path.stat().st_size > 500 and programs_path.exists():
+            programs = json.loads(programs_path.read_text(encoding="utf-8"))
+            return workbook_path.read_bytes(), programs, outside
+
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(jar),
+            urllib.request.HTTPSHandler(context=ssl._create_unverified_context()),
+        )
+        opener.addheaders = [("User-Agent", "WZUNAA-official-course-audit/1.0 (+https://map.scmwcscr.com)")]
+        opener.open(outside, timeout=45).read()
+        page_request = urllib.request.Request(main, headers={"Referer": outside})
+        page = opener.open(page_request, timeout=45).read().decode("utf-8", "replace")
+        parser = NiuFormParser()
+        parser.feed(page)
+        parameters = parser.parameters()
+        parameters.update({
+            "__EVENTTARGET": "DoExport",
+            "__EVENTARGUMENT": "",
+            "TYPE": "EXPORT_ALL",
+            "OP": "OP1",
+            "Q_FACULTY_CODE": "",
+            "Q_GRADE": "",
+            "Q_MUST": "",
+        })
+        export_request = urllib.request.Request(
+            main,
+            data=urllib.parse.urlencode(parameters).encode(),
+            headers={"Referer": main, "Content-Type": "application/x-www-form-urlencoded"},
+        )
+        payload = opener.open(export_request, timeout=90).read()
+        if len(payload) < 500 or not payload.startswith(b"\xd0\xcf\x11\xe0"):
+            raise ValueError(f"NIU official export is not an Excel workbook: {raw_term}")
+        programs = parser.programs()
+        workbook_path.write_bytes(payload)
+        programs_path.write_text(json.dumps(programs, ensure_ascii=False, indent=2), encoding="utf-8")
+        time.sleep(0.1)
+        return payload, programs, outside
+
+
+def niu_department(course_code: str, class_name: str, programs: dict[str, str]) -> str:
+    compact_code = re.sub(r"\s+", "", course_code).upper()
+    candidates = []
+    if len(compact_code) >= 4:
+        candidates.extend((compact_code[0] + compact_code[2:4], compact_code[2:4]))
+    class_codes = re.findall(r"(?:^|,)\s*([A-Z][A-Z0-9]{1,4})\s*-", class_name.upper())
+    candidates.extend(class_codes)
+    for code in candidates:
+        if code in programs:
+            return programs[code]
+    first_class = normalize_space(class_name.split(",", 1)[0])
+    fallback = re.sub(r"^[A-Z][A-Z0-9]{1,4}\s*[-－]\s*", "", first_class)
+    fallback = re.sub(r"\s*[1-9](?:甲|乙)?\s*$", "", fallback)
+    return fallback or "共同課程"
+
+
+def niu_workbook_rows(payload: bytes, programs: dict[str, str], term: str, source_url: str) -> list[dict]:
+    try:
+        import xlrd
+    except ImportError as error:
+        raise RuntimeError("NIU import requires xlrd; install requirements-course-import.txt") from error
+
+    workbook = xlrd.open_workbook(file_contents=payload)
+    raw_rows = []
+    for sheet in workbook.sheets():
+        for index in range(2, sheet.nrows):
+            cells = sheet.row_values(index)
+            if len(cells) < 10:
+                continue
+            class_name = normalize_space(cells[0])
+            code = normalize_space(cells[1])
+            name = normalize_space(cells[2])
+            teachers = split_instructors(cells[9])
+            if not code or not name or not teachers or "專題研究" in name:
+                continue
+            raw_rows.append({
+                "term": term,
+                "courseCode": code,
+                "name": name,
+                "department": niu_department(code, class_name, programs),
+                "teachers": teachers,
+                "officialSourceUrl": source_url,
+            })
+    return raw_rows
+
+
+def parse_niu(active: dict[str, dict], report: dict) -> list[dict]:
+    fetcher = NiuCourseFetcher()
+    downloaded = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(fetcher.fetch, year, semester): (year, semester)
+            for year, semester in TERM_PAIRS
+        }
+        for future in concurrent.futures.as_completed(futures):
+            year, semester = futures[future]
+            term = f"{year}-{semester}"
+            try:
+                payload, programs, source_url = future.result()
+                downloaded.append((term, payload, programs, source_url))
+            except Exception:
+                report["missingTerms"].append(term)
+                report.setdefault("fetchErrors", 0)
+                report["fetchErrors"] += 1
+
+    source_rows = []
+    for term, payload, programs, source_url in sorted(downloaded):
+        term_rows = niu_workbook_rows(payload, programs, term, source_url)
+        source_rows.extend(term_rows)
+        report["availableTerms"].append(term)
+        print(f"NIU {term}: {len(term_rows)} official offerings", flush=True)
+
+    department_sites = load_department_sites("niu")
+    # A teacher appearing in the university's published 115-1 schedule is current
+    # official evidence even when a separate faculty profile was not discovered.
+    for row in source_rows:
+        if row["term"] != f"{CURRENT_YEAR}-1":
+            continue
+        for teacher in row["teachers"]:
+            active.setdefault(teacher, {
+                "name": teacher,
+                "department": row["department"],
+                "sourceUrl": row["officialSourceUrl"],
+            })
+
+    parsed = []
+    for row in source_rows:
+        report["parsedOfferings"] += 1
+        active_rows = [active[teacher] for teacher in row["teachers"] if teacher in active]
+        if not active_rows:
+            report["rejectedWithoutCurrentFaculty"] += 1
+            continue
+        for instructor in active_rows:
+            teacher_token = hashlib.sha256(instructor["name"].encode()).hexdigest()[:8]
+            parsed.append({
+                "universityId": "niu",
+                "term": row["term"],
+                "courseCode": f"{row['courseCode']}-{teacher_token}",
+                "name": row["name"],
+                "department": row["department"],
+                "officialSourceUrl": official_url("niu", row["officialSourceUrl"]),
+                "departmentSourceUrl": department_url("niu", row["department"], [instructor], department_sites),
+                "instructors": [instructor],
+            })
+    report["availableTerms"] = sorted(set(report["availableTerms"]))
+    report["missingTerms"] = sorted(set(report["missingTerms"]))
+    return parsed
+
+
 def current_verified_fallbacks() -> list[dict]:
     """Keep verified 115-1 official records where history endpoints are restricted.
 
@@ -768,11 +990,6 @@ def current_verified_fallbacks() -> list[dict]:
             "universityId": "ntust", "term": "115-1", "courseCode": "AC5413701", "name": "型樣識別與機器學習", "department": "自動化及控制研究所",
             "officialSourceUrl": "https://querycourse.ntust.edu.tw/QueryCourse/?CourseNo=AC5413701&Semester=1151", "departmentSourceUrl": "https://www.ac.ntust.edu.tw/",
             "instructorNames": ["顏志達"],
-        },
-        {
-            "universityId": "niu", "term": "115-1", "courseCode": "MICRO-001", "name": "大一新鮮人營隊", "department": "外國語文學系",
-            "officialSourceUrl": "https://academic.niu.edu.tw/var/file/3/1003/img/220/522057077.pdf", "departmentSourceUrl": "https://dfl.niu.edu.tw/",
-            "instructorNames": ["陳媛玲", "賴軍維", "陳惠如"],
         },
     ]
     result = []
@@ -897,6 +1114,79 @@ def write_course_migrations(courses: list[dict], checked_at: str) -> list[str]:
     return files
 
 
+def write_niu_migrations(courses: list[dict], checked_at: str) -> list[str]:
+    """Write an incremental NIU migration for already deployed databases."""
+    niu_courses = [row for row in courses if row["universityId"] == "niu"]
+    timestamp = checked_at.replace("+00:00", ".000Z")
+    blocks = [
+        "-- Replace only unrated NIU seed cards; published user ratings remain intact.\n"
+        "DELETE FROM course_instructors WHERE course_id IN (SELECT id FROM courses WHERE university_id = 'niu' AND NOT EXISTS (SELECT 1 FROM course_ratings WHERE course_id = courses.id));\n"
+        "--> statement-breakpoint\n"
+        "DELETE FROM courses WHERE university_id = 'niu' AND NOT EXISTS (SELECT 1 FROM course_ratings WHERE course_id = courses.id);\n"
+        "--> statement-breakpoint\n",
+    ]
+    for start in range(0, len(niu_courses), 20):
+        values = []
+        for row in niu_courses[start:start + 20]:
+            values.append("(" + ", ".join(sql_quote(value) for value in (
+                row["id"], row["universityId"], row["term"], row["firstTerm"], row["lastTerm"],
+                ",".join(row["offeredTerms"]), row["courseCode"], row["name"], row["department"],
+                row["officialSourceUrl"], row["departmentSourceUrl"], timestamp, timestamp,
+            )) + ")")
+        blocks.append("\n".join([
+            "INSERT INTO courses (id, university_id, term, first_term, last_term, offered_terms, course_code, name, department, official_source_url, department_source_url, created_at, updated_at) VALUES",
+            ",\n".join(values),
+            "ON CONFLICT(id) DO UPDATE SET term=excluded.term, first_term=excluded.first_term, last_term=excluded.last_term, offered_terms=excluded.offered_terms, course_code=excluded.course_code, name=excluded.name, department=excluded.department, official_source_url=excluded.official_source_url, department_source_url=excluded.department_source_url, updated_at=excluded.updated_at;",
+            "--> statement-breakpoint\n",
+        ]))
+    instructors = [(row, instructor) for row in niu_courses for instructor in row["instructors"]]
+    for start in range(0, len(instructors), 40):
+        values = []
+        for row, instructor in instructors[start:start + 40]:
+            professor_id = (
+                f"(SELECT id FROM professors WHERE university_id='niu' "
+                f"AND name={sql_quote(instructor['name'])} LIMIT 1)"
+            )
+            values.append("(" + ", ".join((
+                sql_quote(row["id"]), sql_quote(instructor["name"]), professor_id,
+                sql_quote(instructor.get("officialSourceUrl", "")), sql_quote(timestamp),
+            )) + ")")
+        blocks.append("\n".join([
+            "INSERT INTO course_instructors (course_id, instructor_name, professor_id, official_source_url, created_at) VALUES",
+            ",\n".join(values),
+            "ON CONFLICT(course_id, instructor_name) DO UPDATE SET professor_id=excluded.professor_id, official_source_url=excluded.official_source_url;",
+            "--> statement-breakpoint\n",
+        ]))
+    blocks.append(
+        "INSERT INTO app_runtime_state (key, value, updated_at)\n"
+        "VALUES ('schema_version', '2026-08-29-niu-courses-v1', CURRENT_TIMESTAMP)\n"
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;\n"
+        "--> statement-breakpoint\nPRAGMA optimize;\n"
+    )
+
+    migration_dir = ROOT / "drizzle"
+    for old in migration_dir.glob("[0-9][0-9][0-9][0-9]_niu_official_course_history*.sql"):
+        old.unlink()
+    header = "-- Generated from National Ilan University's official public course export only.\n"
+    max_bytes = 6 * 1024 * 1024
+    files = []
+    current = header
+    for block in blocks:
+        if len(current.encode("utf-8")) + len(block.encode("utf-8")) > max_bytes and current != header:
+            number = 52 + len(files)
+            name = f"{number:04d}_niu_official_course_history_part_{len(files) + 1:02d}.sql"
+            (migration_dir / name).write_text(current, encoding="utf-8")
+            files.append(name)
+            current = header
+        current += block
+    if current != header:
+        number = 52 + len(files)
+        name = f"{number:04d}_niu_official_course_history_part_{len(files) + 1:02d}.sql"
+        (migration_dir / name).write_text(current, encoding="utf-8")
+        files.append(name)
+    return files
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     active = load_active_faculty()
@@ -908,6 +1198,7 @@ def main() -> None:
     rows.extend(parse_ncu(active["ncu"], reports["ncu"]))
     rows.extend(parse_ccu(active["ccu"], reports["ccu"]))
     rows.extend(parse_ntut(active["ntut"], reports["ntut"]))
+    rows.extend(parse_niu(active["niu"], reports["niu"]))
     rows.extend(current_verified_fallbacks())
     courses = deduplicate(rows)
     by_school = defaultdict(list)
@@ -937,6 +1228,7 @@ def main() -> None:
         "schools": list(reports.values()),
     }
     report_payload["courseMigrationFiles"] = write_course_migrations(courses, checked_at)
+    report_payload["niuMigrationFiles"] = write_niu_migrations(courses, checked_at)
     (DB / "course-import-report.generated.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"courses": len(courses), "bySchool": {school: len(values) for school, values in by_school.items()}}, ensure_ascii=False), flush=True)
 

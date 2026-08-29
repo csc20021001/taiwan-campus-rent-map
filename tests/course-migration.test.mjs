@@ -50,12 +50,17 @@ test('official course history migration loads the generated snapshot into SQLite
     ntust: 'ntust.edu.tw', ntut: 'ntut.edu.tw', niu: 'niu.edu.tw',
   };
 
-  assert.equal(courseCount, 33225);
+  assert.equal(courseCount, 37625);
   assert.ok(instructorCount > courseCount);
   assert.equal(schoolCount, 9);
   assert.equal(range.first, '106-1');
   assert.equal(range.last, '115-1');
   assert.equal(futureCount, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM courses WHERE university_id = 'niu'").get().count, 4401);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM (
+    SELECT c.id FROM courses c JOIN course_instructors ci ON ci.course_id = c.id
+    WHERE c.university_id = 'niu' GROUP BY c.id HAVING COUNT(*) != 1
+  )`).get().count, 0);
   for (const course of courses) {
     assert.match(course.term, /^1(?:0[6-9]|1[0-5])-[12]$/);
     for (const url of [course.official_source_url, course.department_source_url]) {
