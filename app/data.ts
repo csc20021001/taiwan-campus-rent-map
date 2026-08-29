@@ -9,26 +9,6 @@ export type University = {
   address: string;
 };
 
-export type Listing = {
-  id: string;
-  universityId: string;
-  title: string;
-  address: string;
-  monthlyRent: number;
-  roomType: string;
-  areaPing: number;
-  walkMinutes: number;
-  latitude: number;
-  longitude: number;
-  rating: number;
-  reviewCount: number;
-  highlights: string[];
-  description?: string;
-  contactMethod?: string;
-  contactValue?: string;
-  featured?: boolean;
-};
-
 export const universities: University[] = [
   { id: 'ntu', name: '國立臺灣大學', shortName: '臺大', city: '臺北市', district: '大安區', latitude: 25.0173, longitude: 121.5398, address: '臺北市大安區羅斯福路四段1號' },
   { id: 'nthu', name: '國立清華大學', shortName: '清大', city: '新竹市', district: '東區', latitude: 24.7961, longitude: 120.9967, address: '新竹市東區光復路二段101號' },
@@ -45,20 +25,3 @@ export const universities: University[] = [
   { id: 'yzu', name: '元智大學', shortName: '元智', city: '桃園市', district: '中壢區', latitude: 24.9704, longitude: 121.2635, address: '桃園市中壢區遠東路135號' },
   { id: 'fcu', name: '逢甲大學', shortName: '逢甲', city: '臺中市', district: '西屯區', latitude: 24.1788, longitude: 120.6466, address: '臺中市西屯區文華路100號' },
 ];
-
-export const rentalCampuses: University[] = universities.flatMap((university) => {
-  if (university.id !== 'nycu') return [university];
-  return [
-    { ...university, name: '國立陽明交通大學（交大校區）', shortName: '交大校區' },
-    {
-      id: 'nycu-yangming',
-      name: '國立陽明交通大學（陽明校區）',
-      shortName: '陽明校區',
-      city: '臺北市',
-      district: '北投區',
-      latitude: 25.1196737,
-      longitude: 121.5133204,
-      address: '臺北市北投區立農街二段155號',
-    },
-  ];
-});

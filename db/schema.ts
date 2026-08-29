@@ -34,41 +34,6 @@ export const authSessions = sqliteTable('auth_sessions', {
   index('idx_auth_sessions_user_expires').on(table.userId, table.expiresAt),
 ]);
 
-export const listings = sqliteTable('listings', {
-  id: text('id').primaryKey(),
-  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'restrict' }),
-  ownerUserId: text('owner_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  title: text('title').notNull(),
-  address: text('address').notNull(),
-  description: text('description').notNull(),
-  monthlyRent: integer('monthly_rent').notNull(),
-  roomType: text('room_type').notNull(),
-  areaPing: real('area_ping').notNull(),
-  walkMinutes: integer('walk_minutes').notNull(),
-  latitude: real('latitude').notNull(),
-  longitude: real('longitude').notNull(),
-  highlights: text('highlights', { mode: 'json' }).$type<string[]>().notNull(),
-  contactMethod: text('contact_method').notNull(),
-  contactValue: text('contact_value').notNull(),
-  status: text('status').notNull().default('published'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-}, (table) => [
-  index('idx_listings_university_status').on(table.universityId, table.status),
-  index('idx_listings_owner_created').on(table.ownerUserId, table.createdAt),
-]);
-
-export const reviews = sqliteTable('reviews', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  listingId: text('listing_id').notNull().references(() => listings.id, { onDelete: 'cascade' }),
-  authorName: text('author_name').notNull(),
-  rating: integer('rating').notNull(),
-  content: text('content').notNull(),
-  createdAt: text('created_at').notNull(),
-}, (table) => [
-  index('idx_reviews_listing_created').on(table.listingId, table.createdAt),
-]);
-
 export const academicDepartments = sqliteTable('academic_departments', {
   id: text('id').primaryKey(),
   universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
@@ -168,64 +133,6 @@ export const courseRatings = sqliteTable('course_ratings', {
   index('idx_course_ratings_course').on(table.courseId),
   index('idx_course_ratings_user').on(table.userId),
   uniqueIndex('idx_course_ratings_user_course_instructor').on(table.userId, table.courseId, table.instructorName),
-]);
-
-export const rentalLocations = sqliteTable('rental_locations', {
-  id: text('id').primaryKey(),
-  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'restrict' }),
-  address: text('address').notNull(),
-  normalizedAddress: text('normalized_address').notNull(),
-  latitude: real('latitude'),
-  longitude: real('longitude'),
-  source: text('source').notNull(),
-  referenceRent: integer('reference_rent'),
-  referenceRentSource: text('reference_rent_source'),
-  coordinateSource: text('coordinate_source'),
-  coordinatesVerified: integer('coordinates_verified', { mode: 'boolean' }).notNull().default(false),
-  createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-}, (table) => [
-  uniqueIndex('idx_rental_locations_normalized_address').on(table.normalizedAddress),
-  index('idx_rental_locations_university').on(table.universityId),
-  index('idx_rental_locations_coordinates').on(table.latitude, table.longitude),
-]);
-
-export const rentalLocationUniversities = sqliteTable('rental_location_universities', {
-  rentalLocationId: text('rental_location_id').notNull().references(() => rentalLocations.id, { onDelete: 'cascade' }),
-  universityId: text('university_id').notNull().references(() => universities.id, { onDelete: 'cascade' }),
-  createdAt: text('created_at').notNull(),
-}, (table) => [
-  primaryKey({ columns: [table.rentalLocationId, table.universityId] }),
-  index('idx_rental_location_universities_university').on(table.universityId, table.rentalLocationId),
-]);
-
-export const rentalReports = sqliteTable('rental_reports', {
-  id: text('id').primaryKey(),
-  rentalLocationId: text('rental_location_id').notNull().references(() => rentalLocations.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  monthlyRent: integer('monthly_rent').notNull(),
-  overallRating: integer('overall_rating').notNull(),
-  isValid: integer('is_valid', { mode: 'boolean' }).notNull().default(true),
-  isOutlier: integer('is_outlier', { mode: 'boolean' }).notNull().default(false),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-}, (table) => [
-  index('idx_rental_reports_location').on(table.rentalLocationId),
-  index('idx_rental_reports_user').on(table.userId),
-  uniqueIndex('idx_rental_reports_user_location').on(table.userId, table.rentalLocationId),
-]);
-
-export const rentalComments = sqliteTable('rental_comments', {
-  id: text('id').primaryKey(),
-  rentalLocationId: text('rental_location_id').notNull().references(() => rentalLocations.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  content: text('content').notNull(),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-}, (table) => [
-  index('idx_rental_comments_location_created').on(table.rentalLocationId, table.createdAt),
-  index('idx_rental_comments_user_created').on(table.userId, table.createdAt),
 ]);
 
 export const apiRateLimits = sqliteTable('api_rate_limits', {

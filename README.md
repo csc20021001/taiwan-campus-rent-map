@@ -1,90 +1,73 @@
 # WZUNAA
 
-以地圖為核心的臺灣國立大學周邊租屋地點與居住經驗交流平台。網站不保存房東電話、即時空房、押金、契約或房間照片；使用者登入後可新增租屋地點、回報月租與 1～5 分評分，並發表所有訪客都能閱讀的公開評論。
+臺灣大學課程查詢與四項評分網站。首頁會直接進入課程目錄；訪客可依學校、系所、關鍵字與上／下學期篩選，登入後可新增課程並評分。
 
-## MVP 功能
+## 功能
 
-- 支援臺大、清大、陽明交大、中央、中興、中山、中正、臺科、北科、宜大、中原、淡江、元智、逢甲；租屋地圖另把陽明交大拆成陽明校區與交大校區
-- 首頁先選擇「查房子」或「查課程」，閱讀並同意對應使用提醒後才會前往功能頁；租屋地圖位於 `/rentals`，課程評分位於 `/courses`
-- MapLibre GL JS + OpenStreetMap／OpenFreeMap 極簡向量底圖，不需要商業地圖 API 金鑰
-- Marker、地址、租金與評分全部由 Cloudflare D1 提供
-- 52 個政府歷史資料去重後地點、3 個教育部雲端租屋生活網目前待租地點、58 筆政府地點學校關聯，以及 1 個管理員建立的宜蘭地點
-- 政府歷史租賃參考與有效使用者回報不分來源，合併計算平均租金；評分亦取所有有效回報平均
-- Google OpenID Connect、PKCE、HttpOnly 工作階段
-- 同帳號對同一租屋地點或課程只保留一筆評分，重新送出採 UPSERT
-- 租屋地點評論可公開閱讀；使用 Google 登入後可發表 4～500 字評論
-- 地址正規化、相同地址／已確認座標去重、輸入範圍驗證、參數化 SQL、同源檢查與 D1 限流
-- 課程以課名與課號為主體，旁列完整授課教師姓名；課程、教師與系所外部連結只使用學校官方公開網站
-- 35,511 個去重後課程主題；可依 106-1～115-1 學期篩選並分頁載入，評分固定掛在同校同課號的單一課程主題
-- 可依「學習收穫、作業量、考試難易、給分標準」四項給予 1～5 分評分；給分分數越高代表越寬鬆
-- AdSense 版位、隱私權政策、服務條款與 `ads.txt`
+- 支援臺大、清大、陽明交大、中央、中興、中山、中正、臺科、北科、宜大、中原、淡江、元智與逢甲。
+- 課程以「課程＋授課教師」為評分卡；同一門課由多位教師授課時，各教師分開顯示與統計。
+- 顯示教師全名、官方課程頁與官方系所網站；官方資料只採各校公開網站。
+- 依學習收穫、作業量、考試難易、給分標準四項給予 1～5 分；給分分數越高代表越寬鬆。
+- 同帳號對同一課程與教師只保留一筆評分，重新送出採 UPSERT。
+- Google OpenID Connect、PKCE、HttpOnly 工作階段與 D1 限流。
+- 支援使用者新增課程，並保留官方來源與使用者來源標示。
+- AdSense 設定、隱私權政策、服務條款與 `ads.txt`。
 
-## Cloudflare 架構
+## 架構
 
 ```text
 Vinext / Next.js UI + 靜態資產
               ↓
-Cloudflare Worker（頁面與 REST API）
+Cloudflare Worker（頁面、OAuth 與 REST API）
               ↓
 Cloudflare D1
 
-MapLibre → OpenFreeMap / OSM Produced Work（只作底圖）
 Google OAuth → users / auth_sessions（不保存 Google token）
 ```
 
-本專案沿用既有 Vinext 全端架構，由同一個 Cloudflare Worker 提供 React 頁面、靜態資產與 API。Cloudflare Pages 適合 Next.js 靜態匯出；需要 SSR、OAuth callback 與 D1 API 的 Next.js 專案，Cloudflare現行文件建議部署到 Workers。這樣不需拆成兩個站點，也能保留相同網域 Cookie 與同源防護。
-
-第一版沒有圖片上傳，因此 `.openai/hosting.json` 的 R2 binding 保持 `null`。未來新增圖片時只把 object key／metadata 放在 D1，圖片 binary 放 R2。
+專案使用 Sites 管理部署，`.openai/hosting.json` 內的 D1 binding 由部署環境注入。網站沒有檔案上傳，因此 R2 binding 維持 `null`。
 
 ## D1 資料模型
 
-- `universities`：學校與校區座標
-- `users`：內部使用者、唯一 `google_sub`；Email 不公開
-- `auth_sessions`：工作階段 token 的 SHA-256 雜湊
-- `academic_departments`：11 校公開官方網站所列系所、研究所與學位單位
-- `professors`：保留官方師資身分與連結，用來關聯課程授課教師；同校同名老師跨系所名稱以「／」合併
-- `courses`、`course_instructors`：官方歷史課程、首次／最近開課學期、完整開課學期清單、授課教師與校方來源
-- `course_ratings`：唯一 `(user_id, course_id)` 的四項課程評分，不包含教師態度欄位
-- `rental_locations`：不重複的租屋地點；包含 `normalized_address` 與選用的政府參考租金
-- `rental_location_universities`：同一地點可同時屬於清大與陽明交大等多校範圍
-- `rental_reports`：唯一 `(user_id, rental_location_id)` 的月租與整體評分
-- `rental_comments`：租屋地點的公開評論，顯示作者帳號名稱但不公開 Email
-- `api_rate_limits`：以使用者、動作、時間窗計數的基本濫用防護
+- `universities`：學校基本資料。
+- `users`：內部使用者與唯一 `google_sub`；Email 不公開。
+- `auth_sessions`：工作階段 token 的 SHA-256 雜湊。
+- `academic_departments`：官方網站所列系所、研究所與學位單位。
+- `professors`：官方師資身分與來源；同校同名教師跨系所名稱以「／」合併。
+- `professor_ratings`：歷史相容資料；目前前端主軸為課程評分。
+- `courses`、`course_instructors`：官方歷史課程、上／下學期、授課教師與學校來源。
+- `course_ratings`：唯一 `(user_id, course_id, instructor_name)` 的四項課程評分。
+- `api_rate_limits`：以使用者、動作、時間窗計數的基本濫用防護。
+- `app_seed_versions`、`app_runtime_state`：大型官方種子與執行期 schema 狀態。
 
-舊版 `listings`／`reviews` 資料表與 API 仍保留以避免破壞既有資料；新版租屋地點評論使用獨立的 `rental_comments`。所有評論寫入都要求登入並套用限流。
-
-### 租金統計
-
-平均租金將 `rental_locations.reference_rent`（若有）與 `rental_reports` 中 `is_valid = 1 AND is_outlier = 0` 的月租視為同等資料點後計算；平均評分則納入所有有效且非異常的使用者評分。API 接受月租 1,000～200,000 元；至少有 5 個既有有效價格資料點後，低於綜合中位數 0.4 倍或高於 2.5 倍的新值會保留原始紀錄，但標記為 `is_outlier`。
-
-## REST API
+## 路由與 API
 
 | Method | Path | 說明 |
 |---|---|---|
-| GET | `/api/universities` | D1 學校清單 |
-| GET | `/api/rentals?university_id=...&north=...&south=...&east=...&west=...` | 學校／地圖範圍內地點 |
-| GET | `/api/rentals/:id` | 地址、跨來源平均、價格資料筆數、評分與參考租金 |
-| GET | `/api/rentals/:id/comments` | 公開讀取最近 50 則租屋評論 |
-| POST | `/api/rentals` | 登入後新增或導向既有地點 |
-| POST | `/api/rentals/:id/report` | 登入後 UPSERT 實付月租與評分 |
-| POST | `/api/rentals/:id/comments` | 登入後發表公開租屋評論 |
-| GET | `/api/courses` | 依 `university_id`、`department`、`search`、`term` 篩選課程、課號、教師或系所；支援 `limit`、`offset` 分頁 |
-| GET | `/api/courses/:id` | 課程、完整授課教師、官方連結、四項平均與評分人數 |
+| GET | `/` | 轉往 `/courses` |
+| GET | `/courses` | 課程目錄與評分介面 |
+| GET | `/api/universities` | 學校清單 |
 | GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
+| GET | `/api/courses` | 依學校、系所、搜尋、上／下學期篩選；支援分頁 |
+| POST | `/api/courses` | 登入後新增課程 |
+| GET | `/api/courses/:id` | 課程、授課教師、官方連結與四項平均 |
 | POST | `/api/courses/:id/rating` | 登入後 UPSERT 四項課程評分 |
+| GET | `/api/auth/session` | 目前登入狀態 |
+| GET | `/api/auth/google/start` | 啟動 Google 登入 |
+| GET | `/api/auth/google/callback` | Google OAuth callback |
+| POST | `/api/auth/logout` | 登出 |
 
 ## 環境變數
 
 複製 `.env.example` 為 `.env.local`：
 
 ```dotenv
-GOOGLE_CLIENT_ID=你的-client-id
-GOOGLE_CLIENT_SECRET=你的-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
-
-NEXT_PUBLIC_VECTOR_TILE_URL=https://tiles.openfreemap.org/planet
 NEXT_PUBLIC_ADSENSE_CLIENT=
 NEXT_PUBLIC_ADSENSE_SLOT=
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 ```
 
 正式 Google OAuth redirect URI：
@@ -93,7 +76,7 @@ NEXT_PUBLIC_ADSENSE_SLOT=
 https://map.scmwcscr.com/api/auth/google/callback
 ```
 
-Client Secret 只能設定為 Worker／Sites 伺服器環境變數，不可使用 `NEXT_PUBLIC_` 前綴，也不可提交 Git。登入流程驗證 `state`、PKCE、Google JWKS、issuer、audience 與 Email verified；D1 不保存 access token、refresh token 或 Google 密碼。
+Client Secret 只能設定為伺服器環境變數，不可使用 `NEXT_PUBLIC_` 前綴，也不可提交 Git。登入流程驗證 `state`、PKCE、Google JWKS、issuer、audience 與 Email verified；D1 不保存 access token、refresh token 或 Google 密碼。
 
 ## 本機開發
 
@@ -104,33 +87,20 @@ npm install
 npm run dev
 ```
 
-開啟 `http://localhost:3000`。Vinext + Miniflare 會把 D1 的本機 SQLite 放在 `.wrangler/`；首次 API 請求也會以冪等方式建立資料表並匯入學校與租屋地點，不需另裝 SQL server。
+開啟 `http://localhost:3000`。Vinext + Miniflare 會把本機 D1 SQLite 放在 `.wrangler/`；首次 API 請求會冪等建立核心資料表並匯入必要的學校、系所與師資資料。
 
-## Migrations 與 seed
+## 官方課程匯入
 
-- `drizzle/0004_cloudflare_core.sql`：教授、租屋地點、回報、限流、UNIQUE constraints 與 indexes
-- `drizzle/0005_seed_government_rentals.sql`：本次 55 筆輸入去重後的 D1 初始地點
-- `drizzle/0006_fixed_absolute_coordinates.sql`：把共用街道中心點的房屋改為固定、未驗證的絕對座標
-- `drizzle/0008_academic_units_and_rating_dimensions.sql`：新增官方系所資料表與四項老師評分欄位
-- `drizzle/0009_rental_comments.sql`：新增公開租屋評論、內容長度限制與查詢 indexes
-- `drizzle/0010_professor_learning_score.sql`：新增「學習收穫」評分欄位與 1～5 分限制
-- `drizzle/0011_unify_professor_identities.sql`：合併同校同名老師、保留每位使用者最新一筆評分並改為單一老師身分
-- `drizzle/0012_nycu_campuses_and_current_rentals.sql`：新增陽明校區與教育部雲端租屋生活網目前待租地點
-- `drizzle/0013_courses_and_course_ratings.sql`：新增課程、授課教師與不含教師態度的四項課程評分
-- `drizzle/0014_course_history_terms.sql`：新增首次、最近與完整開課學期欄位
-- `drizzle/0015_*.sql`～`0020_*.sql`：部署時分段匯入校方官方歷史課程，避免 API 首次請求執行大量 seed，並讓每個來源檔保持在部署平台限制內
-- `drizzle/0021_runtime_seed_versions.sql`：標記已匯入的系所、教師與租屋 seed；Worker 冷啟動只做一次輕量檢查，不重複寫入數千筆資料
-- `drizzle/0022_runtime_schema_state.sql`：記錄已驗證的執行期 schema；資料完整時冷啟動只需一個狀態查詢，資料缺失時仍會自動回復初始化
-- `scripts/build-rental-seed.mjs`：從內建地址與一次性 geocode cache 重建 TypeScript／SQL seed
-- `db/professors.seed.json` + `scripts/build-professor-seed.mjs`：匯入已由各校官方公開師資頁核對的教授姓名、系所與來源連結
-- `scripts/discover-official-*.mjs`：從 11 校官方學術單位目錄逐系所尋找師資頁；只接受該校官方 HTTPS 子網域
-- `db/nycu-official-units.generated.json`：由陽明交大官方「115 年網站健檢受檢單位清單」整理的系所網址
-- `db/department-seeds.ts`：收錄 11 校官方學術單位頁所列系所、研究所、學位學程與教學單位
-- `scripts/import-official-course-history.py`：只從各校官方 HTTPS 網域建立歷史課程、在校授課身分與系所來源快照，並同步產生 D1 migration 與稽核報告
-- `db/course-seeds.generated.ts`：35,511 個去重後課程主題；`db/course-import-report.generated.json` 記錄逐校涵蓋學期、拒絕筆數與來源限制
+- `scripts/import-official-course-history.py`：只從各校官方 HTTPS 網域建立歷史課程與來源快照。
+- `scripts/import-four-private-universities.py`：匯入中原、淡江、元智與逢甲的校方公開資料。
+- `db/course-seeds.generated.ts`：去重後課程主題；稽核資訊記錄在 `db/course-import-report.generated.json`。
+- `scripts/discover-official-*.mjs`：從各校官方學術單位目錄尋找師資頁，只接受校方官方 HTTPS 子網域。
+- `drizzle/0013_courses_and_course_ratings.sql` 之後的 course migration 建立課程模型並分段匯入官方資料。
+- `drizzle/0050_remove_rentals.sql` 清理已停用功能的舊資料表與執行期標記，使正式 D1 只保留課程所需資料。
+
+歷史課程匯入需要 Python 3 與 `openpyxl`：
 
 ```bash
-npm run seed:build
 npm run professors:discover
 npm run professors:faculty-pages
 npm run professors:extract
@@ -138,45 +108,7 @@ npm run professors:merge
 npm run courses:official
 ```
 
-課程匯入需要 Python 3 與 `openpyxl`。截至 2026-08-28 的官方來源涵蓋如下：
-
-| 學校 | 已發布課程主題 | 官方資料涵蓋 |
-|---|---:|---|
-| 臺大 | 17,564 | 106-1～115-1 |
-| 清大 | 2,349 | 校方現有下載檔：108-1～115-1（不含目前未提供的 114-2） |
-| 陽明交大 | 1 | 保留已核對 115-1 官方課程；校方前端的資料 API 不在校方網域，依政策不直接取用 |
-| 中央 | 6,975 | 106-1～115-1 |
-| 中興 | 2 | 保留已核對 115-1 官方課程；歷史表單的批次匯入尚未納入 |
-| 中正 | 1,942 | 校方壓縮檔 106-1～114-1；114-2、115-1 尚未發布於該目錄 |
-| 中山 | 0 | 官方歷史查詢要求人工驗證碼，程式不繞過 |
-| 臺科 | 2 | 保留已核對 115-1 官方課程；新版查詢介面尚未納入批次匯入 |
-| 北科 | 4,389 | 106-1～115-1 |
-| 宜大 | 1 | 保留系所官方 115-1 課程；尚未找到校級可機讀歷史清單 |
-
-每筆歷史課程至少有一位授課者能由「現行官方師資頁」或「115-1 官方課表／教學大綱」證明仍在該校；未通過者不發布。中山的人工驗證碼、陽明交大的非校方資料 API 等限制會保留在稽核報告，不以論壇、搜尋摘要、商業課程網或其他第三方資料補洞。
-
-Sites 部署會把 `drizzle/` 一併打包並依 journal 套用 D1 migration。若使用自己的 Cloudflare 帳號與 Wrangler，先建立 D1、設定 `DB` binding，然後執行：
-
-```bash
-npx wrangler d1 migrations apply <DATABASE_NAME> --local
-npx wrangler d1 migrations apply <DATABASE_NAME> --remote
-```
-
-教授 JSON 格式：
-
-```json
-[
-  {
-    "id": "ntu-agec-example",
-    "universityId": "ntu",
-    "department": "農業經濟學系",
-    "name": "陳教授",
-    "sourceUrl": "https://www.agec.ntu.edu.tw/zh_tw/teacher"
-  }
-]
-```
-
-目前收錄 11 校、777 個去重後官方學術單位，以及 3,365 筆官方公開師資來源紀錄；跨系所同名者合併後為 2,923 個老師身分，涵蓋 226 個具有可核對公開師資名單的系所／學程。所有學術單位都可在篩選器查看；老師姓名必須能在校方公開師資頁以職稱或專任師資區段核對後才會匯入，論壇、搜尋結果摘要及第三方名錄不會被採用，官方來源只保留在後端核對，不顯示為前端外部連結。
+校方遇到人工驗證碼、非校方 API 或未公開可機讀歷史資料時，限制會保留在稽核報告，不以論壇、搜尋摘要、商業課程網站或其他第三方資料補齊。
 
 ## 品質檢查
 
@@ -188,8 +120,4 @@ npm run build
 npm audit
 ```
 
-Migration 測試會在記憶體 SQLite 實際套用 schema 與 seed，確認歷史地點、教育部目前待租地點、陽明／交大兩校區、教授身分合併、唯一評分／回報限制、公開評論限制，以及政府參考與有效使用者回報的跨來源平均計算。租屋清單以 `created_at DESC` 排序，因此使用者新建與最新政府地點會固定出現在較舊資料之前。
-
-## 地圖授權
-
-畫面保留 OpenStreetMap contributors 與 OpenFreeMap 署名，並使用沒有地名、商家或景點 symbol layer 的自訂極簡樣式。可用 `NEXT_PUBLIC_VECTOR_TILE_URL` 切換至相容的自有 TileJSON 服務。租屋 Marker 只使用 D1 中保存的絕對經緯度，不套用學校相對位置、隨機位移或畫面避碰偏移；所有 Marker 根節點維持 `position:absolute`，選取狀態只改外框與陰影，不覆寫 MapLibre 的定位 `transform`。租屋內容只匯入政府官方公開資料；不從 OSM POI 推論，也不爬取 Google Maps、591、樂屋或其他商業租屋平台。OSM 僅用於底圖與無門牌節點時的固定街道中心座標，並保留「未驗證」狀態。
+測試涵蓋 OAuth 安全、官方網域限制、師資身分合併、教師分卡、上／下學期、四項評分驗證、使用者新增課程、大型 migration、D1 清理及正式建置路由。

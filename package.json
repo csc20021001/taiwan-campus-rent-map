@@ -1,5 +1,5 @@
 {
-  "name": "taiwan-campus-rent-map",
+  "name": "wzunaa-course-reviews",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -18,13 +18,12 @@
     "professors:extract": "node scripts/extract-official-professor-candidates.mjs",
     "professors:merge": "node scripts/merge-official-professor-candidates.mjs && node scripts/build-professor-seed.mjs",
     "courses:official": "python scripts/import-official-course-history.py",
-    "seed:build": "node scripts/build-rental-seed.mjs && node scripts/build-professor-seed.mjs"
+    "seed:build": "node scripts/build-professor-seed.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
     "jose": "^6.2.10",
     "lucide-react": "0.544.0",
-    "maplibre-gl": "^6.6.0",
     "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"

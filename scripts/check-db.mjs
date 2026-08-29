@@ -11,18 +11,16 @@ const database = new DatabaseSync(join(databaseDirectory, databaseFile), { readO
 const indexes = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
 const counts = database.prepare(`SELECT
   (SELECT COUNT(*) FROM universities) AS universities,
-  (SELECT COUNT(*) FROM rental_locations) AS rentalLocations,
-  (SELECT COUNT(*) FROM rental_location_universities) AS rentalAssociations,
-  (SELECT COUNT(*) FROM rental_reports) AS rentalReports,
   (SELECT COUNT(*) FROM academic_departments) AS academicDepartments,
   (SELECT COUNT(*) FROM professors) AS professors,
-  (SELECT COUNT(*) FROM professor_ratings) AS professorRatings,
+  (SELECT COUNT(*) FROM courses) AS courses,
+  (SELECT COUNT(*) FROM course_instructors) AS courseInstructors,
+  (SELECT COUNT(*) FROM course_ratings) AS courseRatings,
   (SELECT COUNT(*) FROM users) AS users`).get();
-const rentalPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT l.id FROM rental_locations l
-  JOIN rental_location_universities lu ON lu.rental_location_id = l.id
-  WHERE lu.university_id = ? AND l.latitude BETWEEN ? AND ? AND l.longitude BETWEEN ? AND ?`)
-  .all('ntu', 24.9, 25.2, 121.4, 121.7);
-const reportPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT AVG(monthly_rent) FROM rental_reports
-  WHERE rental_location_id = ? AND is_valid = 1 AND is_outlier = 0`).all('rental-id');
+const coursePlan = database.prepare(`EXPLAIN QUERY PLAN SELECT id FROM courses
+  WHERE university_id = ? AND semester = ? AND department = ? ORDER BY name LIMIT 36`)
+  .all('ntu', '1', '資訊工程學系');
+const ratingPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT AVG(learning_score) FROM course_ratings
+  WHERE course_id = ? AND instructor_name = ?`).all('course-id', '教師');
 
-console.log(JSON.stringify({ indexes, counts, rentalPlan, reportPlan }, null, 2));
+console.log(JSON.stringify({ indexes, counts, coursePlan, ratingPlan }, null, 2));

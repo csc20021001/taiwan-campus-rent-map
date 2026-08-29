@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_TC, Noto_Serif_TC } from 'next/font/google';
 import Script from 'next/script';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import './globals.css';
 
 const notoSans = Noto_Sans_TC({ variable: '--font-noto-sans-tc', subsets: ['latin'], display: 'swap' });
@@ -11,22 +10,20 @@ const hasAdsenseClient = /^ca-pub-\d+$/.test(adsenseClient);
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://map.scmwcscr.com'),
-  title: 'WZUNAA｜校園租屋與課程評分',
-  description: '查詢臺灣國立大學周邊租屋資訊與課程四項評分。',
+  title: 'WZUNAA｜大學課程評分',
+  description: '查詢臺灣各大學公開課程資訊與四項課程評分。',
   openGraph: {
     type: 'website',
     locale: 'zh_TW',
     url: 'https://map.scmwcscr.com',
     siteName: 'WZUNAA',
-    title: 'WZUNAA｜校園租屋與課程評分',
-    description: '查詢臺灣國立大學周邊租屋資訊與課程四項評分。',
-    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'WZUNAA 大學周邊租屋地圖' }],
+    title: 'WZUNAA｜大學課程評分',
+    description: '查詢臺灣各大學公開課程資訊與四項課程評分。',
   },
   twitter: {
-    card: 'summary_large_image',
-    title: 'WZUNAA｜校園租屋與課程評分',
-    description: '查詢臺灣國立大學周邊租屋資訊與課程四項評分。',
-    images: ['/og.png'],
+    card: 'summary',
+    title: 'WZUNAA｜大學課程評分',
+    description: '查詢臺灣各大學公開課程資訊與四項課程評分。',
   },
   ...(hasAdsenseClient ? { other: { 'google-adsense-account': adsenseClient } } : {}),
 };

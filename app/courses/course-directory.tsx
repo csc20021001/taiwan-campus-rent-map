@@ -1,8 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Check, ExternalLink, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
+import { Check, ExternalLink, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
 import { universities } from '@/app/data';
 
 type Course = {
@@ -211,7 +210,7 @@ export function CourseDirectory() {
   }
 
   return <main className="professor-page">
-    <header className="professor-topbar"><Link href="/rentals"><ArrowLeft size={15} />回租屋地圖</Link><span className="professor-brand"><GraduationCap size={18} />WZUNAA</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fcourses"><LogIn size={14} />Google 登入</a>}</header>
+    <header className="professor-topbar"><span className="professor-brand"><GraduationCap size={18} />WZUNAA 課程評分</span>{auth.user ? <small>{auth.user.name}</small> : <a href="/api/auth/google/start?returnTo=%2Fcourses"><LogIn size={14} />Google 登入</a>}</header>
     <section className="professor-hero"><p><Star size={14} fill="currentColor" />課程評分專區</p><h1>{school.shortName}課程評分</h1><span>以課程與授課教師為單位，查看學習收穫、作業、考試與給分評價</span><button className="course-add-button" type="button" onClick={openSubmission}><Plus size={15} />新增課程</button></section>
     <p className="professor-source-note"><ShieldCheck size={14} />資料來源以學校公開課程頁為準；課程與授課教師仍可能依校方最新公告調整。</p>
     <section className="professor-controls">
@@ -258,5 +257,6 @@ export function CourseDirectory() {
       <small>送出後，同學就能分享這門課的修課經驗。</small>
       <button className="course-modal-submit" type="submit" disabled={submitting || departments.length === 0}>{submitting ? '送出中…' : '新增課程'}</button>
     </form></div>}
+    <footer className="course-footer"><span>WZUNAA</span><nav><a href="/privacy">隱私權政策</a><a href="/terms">服務條款</a></nav></footer>
   </main>;
 }
