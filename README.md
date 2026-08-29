@@ -1,13 +1,13 @@
 # WZUNAA
 
-臺灣大學課程查詢與四項評分網站。首頁會直接進入課程目錄；訪客可依學校、系所、關鍵字與上／下學期篩選，登入後可新增課程並評分。
+臺灣大學課程查詢與三項評分網站。首頁會直接進入課程目錄；訪客可依學校、系所、關鍵字與上／下學期篩選，登入後可新增課程並評分。
 
 ## 功能
 
 - 支援臺大、清大、陽明交大、中央、中興、中山、中正、臺科、北科、宜大、中原、淡江、元智與逢甲。
 - 課程以「課程＋授課教師」為評分卡；同一門課由多位教師授課時，各教師分開顯示與統計。
 - 顯示教師全名、官方課程頁與官方系所網站；官方資料只採各校公開網站。
-- 依學習收穫、作業量、考試難易、給分標準四項給予 1～5 分；給分分數越高代表越寬鬆。
+- 依作業量、考試難度、點名頻率三項給予 0～100 分；分數越高分別代表作業越多、考試越難、點名越頻繁。
 - 同帳號對同一課程與教師只保留一筆評分，重新送出採 UPSERT。
 - Google OpenID Connect、PKCE、HttpOnly 工作階段與 D1 限流。
 - 支援使用者新增課程，並保留官方來源與使用者來源標示。
@@ -36,7 +36,7 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 - `professors`：官方師資身分與來源；同校同名教師跨系所名稱以「／」合併。
 - `professor_ratings`：歷史相容資料；目前前端主軸為課程評分。
 - `courses`、`course_instructors`：官方歷史課程、上／下學期、授課教師與學校來源。
-- `course_ratings`：唯一 `(user_id, course_id, instructor_name)` 的四項課程評分。
+- `course_ratings`：唯一 `(user_id, course_id, instructor_name)` 的三項 0～100 課程評分。
 - `api_rate_limits`：以使用者、動作、時間窗計數的基本濫用防護。
 - `app_seed_versions`、`app_runtime_state`：大型官方種子與執行期 schema 狀態。
 
@@ -50,8 +50,8 @@ Google OAuth → users / auth_sessions（不保存 Google token）
 | GET | `/api/departments?university_id=...` | 官方系所、學院、類型與來源 |
 | GET | `/api/courses` | 依學校、系所、搜尋、上／下學期篩選；支援分頁 |
 | POST | `/api/courses` | 登入後新增課程 |
-| GET | `/api/courses/:id` | 課程、授課教師、官方連結與四項平均 |
-| POST | `/api/courses/:id/rating` | 登入後 UPSERT 四項課程評分 |
+| GET | `/api/courses/:id` | 課程、授課教師、官方連結與三項平均 |
+| POST | `/api/courses/:id/rating` | 登入後 UPSERT 三項 0～100 課程評分 |
 | GET | `/api/auth/session` | 目前登入狀態 |
 | GET | `/api/auth/google/start` | 啟動 Google 登入 |
 | GET | `/api/auth/google/callback` | Google OAuth callback |
@@ -120,4 +120,4 @@ npm run build
 npm audit
 ```
 
-測試涵蓋 OAuth 安全、官方網域限制、師資身分合併、教師分卡、上／下學期、四項評分驗證、使用者新增課程、大型 migration、D1 清理及正式建置路由。
+測試涵蓋 OAuth 安全、官方網域限制、師資身分合併、教師分卡、上／下學期、三項 0～100 評分驗證、使用者新增課程、大型 migration、D1 清理及正式建置路由。

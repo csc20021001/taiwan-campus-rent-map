@@ -15,10 +15,9 @@ export type CourseView = {
   sourceType: 'official' | 'user';
   instructors: CourseInstructorView[];
   averageRating: number | null;
-  averageLearning: number | null;
   averageWorkload: number | null;
   averageExamDifficulty: number | null;
-  averageGradingStandard: number | null;
+  averageAttendanceFrequency: number | null;
   ratingCount: number;
 };
 
@@ -35,10 +34,9 @@ type CourseRow = {
   instructor_name: string;
   instructor_source_url: string;
   average_rating: number | null;
-  average_learning: number | null;
   average_workload: number | null;
   average_exam_difficulty: number | null;
-  average_grading_standard: number | null;
+  average_attendance_frequency: number | null;
   rating_count: number;
 };
 
@@ -76,10 +74,9 @@ function mapCourse(row: CourseRow): CourseView {
     sourceType: row.source_type === 'user' ? 'user' : 'official',
     instructors: [{ name: row.instructor_name, officialSourceUrl: row.instructor_source_url }],
     averageRating: numericOrNull(row.average_rating),
-    averageLearning: numericOrNull(row.average_learning),
     averageWorkload: numericOrNull(row.average_workload),
     averageExamDifficulty: numericOrNull(row.average_exam_difficulty),
-    averageGradingStandard: numericOrNull(row.average_grading_standard),
+    averageAttendanceFrequency: numericOrNull(row.average_attendance_frequency),
     ratingCount: Number(row.rating_count),
   };
 }
@@ -88,11 +85,12 @@ const selectWithRatings = `
   SELECT c.id, c.university_id, c.semester, c.course_code, c.name, c.department,
     c.official_source_url, c.department_source_url, c.source_type,
     ci.instructor_name, ci.official_source_url AS instructor_source_url,
-    ROUND(AVG((cr.learning_score + cr.workload_score + cr.exam_difficulty_score + cr.grading_standard_score) / 4.0), 1) AS average_rating,
-    ROUND(AVG(cr.learning_score), 1) AS average_learning,
+    ROUND(AVG((cr.workload_score + cr.exam_difficulty_score +
+      CASE WHEN cr.attendance_frequency_score IS NULL THEN 0 ELSE cr.attendance_frequency_score END) /
+      CASE WHEN cr.attendance_frequency_score IS NULL THEN 2.0 ELSE 3.0 END), 1) AS average_rating,
     ROUND(AVG(cr.workload_score), 1) AS average_workload,
     ROUND(AVG(cr.exam_difficulty_score), 1) AS average_exam_difficulty,
-    ROUND(AVG(cr.grading_standard_score), 1) AS average_grading_standard,
+    ROUND(AVG(cr.attendance_frequency_score), 1) AS average_attendance_frequency,
     COUNT(cr.id) AS rating_count
   FROM courses c
   JOIN course_instructors ci ON ci.course_id = c.id

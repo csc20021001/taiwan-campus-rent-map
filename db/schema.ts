@@ -1,4 +1,5 @@
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const universities = sqliteTable('universities', {
   id: text('id').primaryKey(),
@@ -123,13 +124,15 @@ export const courseRatings = sqliteTable('course_ratings', {
   courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
   instructorName: text('instructor_name').notNull(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  learningScore: integer('learning_score').notNull(),
   workloadScore: integer('workload_score').notNull(),
   examDifficultyScore: integer('exam_difficulty_score').notNull(),
-  gradingStandardScore: integer('grading_standard_score').notNull(),
+  attendanceFrequencyScore: integer('attendance_frequency_score'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
+  check('course_ratings_workload_score_range', sql`typeof(${table.workloadScore}) = 'integer' AND ${table.workloadScore} BETWEEN 0 AND 100`),
+  check('course_ratings_exam_difficulty_score_range', sql`typeof(${table.examDifficultyScore}) = 'integer' AND ${table.examDifficultyScore} BETWEEN 0 AND 100`),
+  check('course_ratings_attendance_frequency_score_range', sql`${table.attendanceFrequencyScore} IS NULL OR (typeof(${table.attendanceFrequencyScore}) = 'integer' AND ${table.attendanceFrequencyScore} BETWEEN 0 AND 100)`),
   index('idx_course_ratings_course').on(table.courseId),
   index('idx_course_ratings_user').on(table.userId),
   uniqueIndex('idx_course_ratings_user_course_instructor').on(table.userId, table.courseId, table.instructorName),

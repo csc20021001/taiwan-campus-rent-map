@@ -31,20 +31,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: '找不到課程資料。' }, { status: 404 });
   }
   const now = new Date().toISOString();
-  const { learningScore, workloadScore, examDifficultyScore, gradingStandardScore } = validated.value;
+  const { workloadScore, examDifficultyScore, attendanceFrequencyScore } = validated.value;
   await db.prepare(`INSERT INTO course_ratings (
-      id, course_id, instructor_name, user_id, learning_score, workload_score,
-      exam_difficulty_score, grading_standard_score, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, course_id, instructor_name, user_id, workload_score,
+      exam_difficulty_score, attendance_frequency_score, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, course_id, instructor_name) DO UPDATE SET
-      learning_score = excluded.learning_score,
       workload_score = excluded.workload_score,
       exam_difficulty_score = excluded.exam_difficulty_score,
-      grading_standard_score = excluded.grading_standard_score,
+      attendance_frequency_score = excluded.attendance_frequency_score,
       updated_at = excluded.updated_at`)
     .bind(
-      crypto.randomUUID(), identity.courseId, identity.instructorName, user.id, learningScore, workloadScore,
-      examDifficultyScore, gradingStandardScore, now, now,
+      crypto.randomUUID(), identity.courseId, identity.instructorName, user.id, workloadScore,
+      examDifficultyScore, attendanceFrequencyScore, now, now,
     ).run();
   return NextResponse.json({ course: await getCourse(id) });
 }

@@ -11,19 +11,19 @@ const hasAdsenseClient = /^ca-pub-\d+$/.test(adsenseClient);
 export const metadata: Metadata = {
   metadataBase: new URL('https://map.scmwcscr.com'),
   title: 'WZUNAA｜大學課程評分',
-  description: '查詢臺灣各大學公開課程資訊與四項課程評分。',
+  description: '查詢臺灣各大學公開課程資訊，以及作業量、考試難度與點名頻率評分。',
   openGraph: {
     type: 'website',
     locale: 'zh_TW',
     url: 'https://map.scmwcscr.com',
     siteName: 'WZUNAA',
     title: 'WZUNAA｜大學課程評分',
-    description: '查詢臺灣各大學公開課程資訊與四項課程評分。',
+    description: '查詢臺灣各大學公開課程資訊，以及作業量、考試難度與點名頻率評分。',
   },
   twitter: {
     card: 'summary',
     title: 'WZUNAA｜大學課程評分',
-    description: '查詢臺灣各大學公開課程資訊與四項課程評分。',
+    description: '查詢臺灣各大學公開課程資訊，以及作業量、考試難度與點名頻率評分。',
   },
   ...(hasAdsenseClient ? { other: { 'google-adsense-account': adsenseClient } } : {}),
 };

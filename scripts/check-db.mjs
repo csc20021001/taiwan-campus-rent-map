@@ -20,7 +20,7 @@ const counts = database.prepare(`SELECT
 const coursePlan = database.prepare(`EXPLAIN QUERY PLAN SELECT id FROM courses
   WHERE university_id = ? AND semester = ? AND department = ? ORDER BY name LIMIT 36`)
   .all('ntu', '1', '資訊工程學系');
-const ratingPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT AVG(learning_score) FROM course_ratings
+const ratingPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT AVG(workload_score) FROM course_ratings
   WHERE course_id = ? AND instructor_name = ?`).all('course-id', '教師');
 
 console.log(JSON.stringify({ indexes, counts, coursePlan, ratingPlan }, null, 2));

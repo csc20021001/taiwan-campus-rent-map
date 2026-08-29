@@ -7,7 +7,7 @@ import { departmentSeeds } from './department-seeds';
 const activeUniversityIds = new Set(universities.map((school) => school.id));
 
 let databaseReady: Promise<void> | null = null;
-const runtimeSchemaVersion = '2026-08-29-course-links-v1';
+const runtimeSchemaVersion = '2026-08-29-course-rating-100-v1';
 
 export function getD1() {
   if (!env.DB) throw new Error('Cloudflare D1 binding `DB` is unavailable.');
@@ -248,10 +248,9 @@ async function initializeCoreTables() {
       course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       instructor_name TEXT NOT NULL,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      learning_score INTEGER NOT NULL CHECK (learning_score BETWEEN 1 AND 5),
-      workload_score INTEGER NOT NULL CHECK (workload_score BETWEEN 1 AND 5),
-      exam_difficulty_score INTEGER NOT NULL CHECK (exam_difficulty_score BETWEEN 1 AND 5),
-      grading_standard_score INTEGER NOT NULL CHECK (grading_standard_score BETWEEN 1 AND 5),
+      workload_score INTEGER NOT NULL CHECK (typeof(workload_score) = 'integer' AND workload_score BETWEEN 0 AND 100),
+      exam_difficulty_score INTEGER NOT NULL CHECK (typeof(exam_difficulty_score) = 'integer' AND exam_difficulty_score BETWEEN 0 AND 100),
+      attendance_frequency_score INTEGER CHECK (attendance_frequency_score IS NULL OR (typeof(attendance_frequency_score) = 'integer' AND attendance_frequency_score BETWEEN 0 AND 100)),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE (user_id, course_id, instructor_name)

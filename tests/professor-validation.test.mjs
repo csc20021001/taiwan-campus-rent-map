@@ -6,14 +6,18 @@ import { validateCourseRating } from '../app/api/courses/validation.mjs';
 const directorySource = readFileSync(new URL('../app/courses/course-directory.tsx', import.meta.url), 'utf8');
 const courseDbSource = readFileSync(new URL('../db/courses.ts', import.meta.url), 'utf8');
 
-test('course rating requires all four integer dimensions from 1 to 5', () => {
-  const valid = { learningScore: 4, workloadScore: 2, examDifficultyScore: 3, gradingStandardScore: 4 };
+test('course rating requires all three integer dimensions from 0 to 100', () => {
+  const valid = { workloadScore: 0, examDifficultyScore: 51, attendanceFrequencyScore: 100 };
   assert.deepEqual(validateCourseRating(valid), { ok: true, value: valid });
-  assert.equal(validateCourseRating({ ...valid, workloadScore: 0 }).ok, false);
-  assert.equal(validateCourseRating({ ...valid, examDifficultyScore: 5.5 }).ok, false);
-  assert.equal(validateCourseRating({ learningScore: 5 }).ok, false);
+  assert.equal(validateCourseRating({ ...valid, workloadScore: -1 }).ok, false);
+  assert.equal(validateCourseRating({ ...valid, examDifficultyScore: 100.5 }).ok, false);
+  assert.equal(validateCourseRating({ ...valid, attendanceFrequencyScore: 101 }).ok, false);
+  assert.equal(validateCourseRating({ workloadScore: 100 }).ok, false);
+  assert.equal(validateCourseRating({ ...valid, workloadScore: null }).ok, false);
+  assert.equal(validateCourseRating({ ...valid, workloadScore: '' }).ok, false);
+  assert.equal(validateCourseRating({ ...valid, workloadScore: false }).ok, false);
   assert.equal(validateCourseRating({
-    learning_score: 5, workload_score: 2, exam_difficulty_score: 3, grading_standard_score: 4,
+    workload_score: 0, exam_difficulty_score: 51, attendance_frequency_score: 100,
   }).ok, true);
 });
 

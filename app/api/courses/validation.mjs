@@ -1,15 +1,19 @@
 export function validateCourseRating(body) {
   const fields = [
-    ['learningScore', 'learning_score', '學習收穫'],
     ['workloadScore', 'workload_score', '作業量'],
-    ['examDifficultyScore', 'exam_difficulty_score', '考試難易'],
-    ['gradingStandardScore', 'grading_standard_score', '給分標準'],
+    ['examDifficultyScore', 'exam_difficulty_score', '考試難度'],
+    ['attendanceFrequencyScore', 'attendance_frequency_score', '點名頻率'],
   ];
   const value = {};
   for (const [camelKey, snakeKey, label] of fields) {
-    const score = typeof body[camelKey] === 'number' ? body[camelKey] : Number(body[snakeKey]);
-    if (!Number.isInteger(score) || score < 1 || score > 5) {
-      return { ok: false, error: `${label}評分需為 1 至 5。` };
+    const rawScore = Object.hasOwn(body, camelKey) ? body[camelKey] : body[snakeKey];
+    const score = typeof rawScore === 'number'
+      ? rawScore
+      : typeof rawScore === 'string' && /^\d{1,3}$/.test(rawScore.trim())
+        ? Number(rawScore.trim())
+        : Number.NaN;
+    if (!Number.isInteger(score) || score < 0 || score > 100) {
+      return { ok: false, error: `${label}評分需為 0 至 100 的整數。` };
     }
     value[camelKey] = score;
   }
