@@ -6,10 +6,13 @@ const report = JSON.parse(readFileSync(new URL('../db/course-import-report.gener
 const importer = readFileSync(new URL('../scripts/import-official-course-history.py', import.meta.url), 'utf8');
 
 test('historical course import is material and records its coverage', () => {
-  assert.equal(report.courseCount, 37625);
+  assert.equal(report.baseSnapshotCourseCount, 37625);
+  assert.ok(report.courseCount > report.baseSnapshotCourseCount);
+  assert.ok(report.completionCourseCount > 0);
   assert.equal(report.policy.officialUniversityDomainsOnly, true);
   assert.equal(report.policy.requiresCurrentOfficialFacultyEvidence, true);
   assert.ok(report.courseMigrationFiles.length > 1);
+  assert.ok(report.completionMigrationFiles.length > 1);
   for (const file of report.courseMigrationFiles) {
     const size = statSync(new URL(`../drizzle/${file}`, import.meta.url)).size;
     assert.ok(size < 6.1 * 1024 * 1024, `${file} is too large for the source repository`);

@@ -92,6 +92,7 @@ npm run dev
 ## 官方課程匯入
 
 - `scripts/import-official-course-history.py`：只從各校官方 HTTPS 網域建立歷史課程與來源快照。
+- `scripts/import-place-name-universities.py`：補入全臺地名國立／市立大學的公開課表；以最新公開課表核對仍在校教師，並把受驗證碼或登入限制的學校明載於 `db/place-name-course-report.generated.json`。
 - `scripts/import-four-private-universities.py`：匯入中原、淡江、元智與逢甲的校方公開資料。
 - `db/course-seeds.generated.ts`：去重後課程主題；稽核資訊記錄在 `db/course-import-report.generated.json`。
 - `scripts/discover-official-*.mjs`：從各校官方學術單位目錄尋找師資頁，只接受校方官方 HTTPS 子網域。
@@ -106,6 +107,7 @@ npm run professors:faculty-pages
 npm run professors:extract
 npm run professors:merge
 npm run courses:official
+npm run courses:place-names
 ```
 
 校方遇到人工驗證碼、非校方 API 或未公開可機讀歷史資料時，限制會保留在稽核報告，不以論壇、搜尋摘要、商業課程網站或其他第三方資料補齊。

@@ -16,10 +16,12 @@ import io
 import json
 import re
 import ssl
+import subprocess
 import sys
 import tarfile
 import threading
 import time
+import xml.etree.ElementTree as ET
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -37,6 +39,7 @@ DB = ROOT / "db"
 CURRENT_YEAR = 115
 EARLIEST_YEAR = 106
 TERM_PAIRS = tuple((year, semester) for year in range(EARLIEST_YEAR, CURRENT_YEAR) for semester in (1, 2)) + ((CURRENT_YEAR, 1),)
+COMPLETION_MIGRATION_BATCH = 1
 ALLOWED_HOST_SUFFIXES = {
     "ntu": ("ntu.edu.tw",),
     "nthu": ("nthu.edu.tw",),
@@ -59,17 +62,20 @@ NTHU_SOURCES = (
     ("nthu-1151.json", "https://www.ccxp.nthu.edu.tw/ccxp/INQUIRE/JH/OPENDATA/open_course_data.json"),
 )
 
+NYCU_OFFICIAL_SITE = "https://coz.aa.nycu.edu.tw"
+NTUST_API = "https://querycourse.ntust.edu.tw/QueryCourse/api"
+
 CCU_TERMS = tuple(f"{year}{semester}" for year in range(EARLIEST_YEAR, 115) for semester in (1, 2)) + ("1151",)
 
 COURSE_SOURCE_STATUS = {
     "ntu": {"status": "imported", "officialIndex": "https://nol.ntu.edu.tw/nol/guest/main.php", "note": "校方課程網公開歷史查詢"},
     "nthu": {"status": "imported", "officialIndex": "https://curricul.site.nthu.edu.tw/p/404-1208-111356.php?Lang=zh-tw", "note": "官方下載檔目前涵蓋 108 至 115-1"},
-    "nycu": {"status": "restricted", "officialIndex": "https://coz.aa.nycu.edu.tw/", "note": "校方前端使用非校方網域 API；依來源政策未直接取用"},
+    "nycu": {"status": "imported", "officialIndex": "https://coz.aa.nycu.edu.tw/", "note": "校方公開 sitemap 逐筆核對 106 至 115-1 課程頁"},
     "ncu": {"status": "imported", "officialIndex": "https://cis.ncu.edu.tw/Course/main/query/byYears", "note": "官方逐年逐系歷史課表"},
-    "nchu": {"status": "pending", "officialIndex": "https://onepiece.nchu.edu.tw/cofsys/plsql/crseqry_home", "note": "官方逐學期表單可用，待完成多學制批次匯入"},
+    "nchu": {"status": "imported", "officialIndex": "https://onepiece.nchu.edu.tw/cofsys/plsql/crseqry_home", "note": "校方目前公開 115-1 全學制課表；舊學期選項目前回傳空表"},
     "ccu": {"status": "imported", "officialIndex": "https://kiki.ccu.edu.tw/~ccmisp06/Course/zipfiles/", "note": "逐學期官方壓縮檔"},
     "nsysu": {"status": "restricted", "officialIndex": "https://selcrs.nsysu.edu.tw/menu1/CourseQuery.asp?HIS=1&eng=0", "note": "官方歷史查詢要求人工驗證碼，未繞過"},
-    "ntust": {"status": "pending", "officialIndex": "https://querycourse.ntust.edu.tw/querycourse/", "note": "官方舊課程查詢可用，待完成 API 匯入"},
+    "ntust": {"status": "imported", "officialIndex": "https://querycourse.ntust.edu.tw/querycourse/", "note": "校方公開課程 API 涵蓋 106 至 115-1"},
     "ntut": {"status": "imported", "officialIndex": "https://aps.ntut.edu.tw/course/tw/QueryCurrPage.jsp", "note": "官方逐學期、逐開課單位歷史查詢"},
     "niu": {"status": "imported", "officialIndex": "https://academic.niu.edu.tw/p/403-1003-117-1.php", "note": "校級公開課表可逐學期匯出；目前匯入 106 至 115-1"},
 }
@@ -110,11 +116,23 @@ def official_url(university_id: str, value: str) -> str:
     return value
 
 
-def download(filename: str, url: str) -> Path:
-    host = (urlparse(url).hostname or "").lower()
-    university_id = next((school for school, suffixes in ALLOWED_HOST_SUFFIXES.items() if any(host == suffix or host.endswith("." + suffix) for suffix in suffixes)), None)
+def official_university_for_url(value: str) -> str:
+    parsed = urlparse(value)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https":
+        raise ValueError(f"official source must use HTTPS: {value}")
+    university_id = next((
+        school
+        for school, suffixes in ALLOWED_HOST_SUFFIXES.items()
+        if any(host == suffix or host.endswith("." + suffix) for suffix in suffixes)
+    ), None)
     if university_id is None:
-        raise ValueError(f"no university policy for official URL: {url}")
+        raise ValueError(f"no university policy for official URL: {value}")
+    return university_id
+
+
+def download(filename: str, url: str) -> Path:
+    university_id = official_university_for_url(url)
     official_url(university_id, url)
     CACHE.mkdir(exist_ok=True)
     path = CACHE / filename
@@ -133,6 +151,34 @@ def download(filename: str, url: str) -> Path:
     path.write_bytes(payload)
     time.sleep(0.15)
     return path
+
+
+def cached_request(filename: str, url: str, *, data: bytes | None = None,
+                   headers: dict[str, str] | None = None, timeout: int = 90,
+                   minimum_size: int = 100) -> bytes:
+    """Cache a bounded university-owned public response for reproducible imports."""
+    official_url(official_university_for_url(url), url)
+    CACHE.mkdir(exist_ok=True)
+    path = CACHE / filename
+    if path.exists() and path.stat().st_size >= minimum_size:
+        return path.read_bytes()
+    request = urllib.request.Request(url, data=data, headers={
+        "User-Agent": "WZUNAA-official-course-audit/3.0 (+https://map.scmwcscr.com)",
+        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.5",
+        **(headers or {}),
+    })
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = response.read()
+    if len(payload) < minimum_size:
+        raise ValueError(f"official response is unexpectedly small: {url}")
+    path.write_bytes(payload)
+    return payload
+
+
+def cached_json_request(filename: str, url: str, *, data: bytes | None = None,
+                        headers: dict[str, str] | None = None, timeout: int = 90) -> object:
+    payload = cached_request(filename, url, data=data, headers=headers, timeout=timeout)
+    return json.loads(payload.decode("utf-8-sig"))
 
 
 def load_active_faculty() -> dict[str, dict[str, dict]]:
@@ -262,6 +308,26 @@ def parse_nthu(active: dict[str, dict], report: dict) -> list[dict]:
             if code and department:
                 prefix_departments[code] = department
     department_sites = load_department_sites("nthu")
+
+    # The latest university-published schedule is current affiliation evidence.
+    # This is materially more complete than relying only on separately crawled
+    # faculty profile pages and mirrors the NIU/NCU current-roster rule below.
+    for url, rows in source_rows:
+        for row in rows:
+            raw_code = normalize_space(first_value(row, ("科號",)))
+            term = term_from_raw(first_value(row, ("學年期",)) or raw_code[:5])
+            if term != f"{CURRENT_YEAR}-1":
+                continue
+            code = normalize_space(raw_code[5:]) if re.match(r"^\d{5}", raw_code) else raw_code
+            prefix = normalize_space(first_value(row, ("代碼", "開課代碼", "code"))) or code.split()[0]
+            department = normalize_space(first_value(row, ("系所全名", "開課單位"))) or prefix_departments.get(prefix) or "共同課程"
+            for teacher in split_instructors(first_value(row, ("授課教師", "教師"))):
+                active.setdefault(teacher, {
+                    "name": teacher,
+                    "department": department,
+                    "sourceUrl": official_url("nthu", url),
+                })
+
     for url, rows in source_rows:
         for row in rows:
             raw_code = normalize_space(first_value(row, ("科號",)))
@@ -273,7 +339,7 @@ def parse_nthu(active: dict[str, dict], report: dict) -> list[dict]:
             teachers = split_instructors(first_value(row, ("授課教師", "教師")))
             active_rows = [active[name] for name in teachers if name in active]
             report["parsedOfferings"] += 1
-            if not code or not name or not active_rows:
+            if not code or not name or "專題研究" in name or not active_rows:
                 report["rejectedWithoutCurrentFaculty"] += 1
                 continue
             prefix = normalize_space(first_value(row, ("代碼", "開課代碼", "code"))) or code.split()[0]
@@ -284,6 +350,420 @@ def parse_nthu(active: dict[str, dict], report: dict) -> list[dict]:
                 "departmentSourceUrl": department_url("nthu", department, active_rows, department_sites),
                 "instructors": active_rows,
             })
+    return parsed
+
+
+def nycu_labeled_value(page: str, label: str) -> str:
+    match = re.search(
+        rf"{re.escape(label)}</div>\s*<div[^>]*>(.*?)</div>",
+        page,
+        flags=re.I | re.S,
+    )
+    return strip_html_fragment(match.group(1)) if match else ""
+
+
+def nycu_course_page(source: str, year: int, semester: int) -> dict | None:
+    course_no = urllib.parse.unquote(source.rstrip("/").rsplit("/", 1)[-1])
+    cache_token = hashlib.sha256(source.encode()).hexdigest()[:20]
+    page = cached_request(
+        f"nycu-{year}{semester}-course-{cache_token}.html",
+        source,
+        timeout=90,
+        minimum_size=1_000,
+    ).decode("utf-8", "replace")
+    structured = None
+    for raw in re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        page,
+        flags=re.I | re.S,
+    ):
+        try:
+            candidate = json.loads(html.unescape(raw))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict) and candidate.get("@type") == "Course":
+            structured = candidate
+            break
+    name = normalize_space((structured or {}).get("name"))
+    permanent_no = nycu_labeled_value(page, "永久課號")
+    department = nycu_labeled_value(page, "開課單位")
+    teachers = split_instructors(nycu_labeled_value(page, "授課教師"))
+    # A published official page can legitimately have no teacher assigned yet.
+    # Count the page as parsed so coverage validation measures fetch/schema
+    # failures; the current-faculty filter below still excludes unassigned rows.
+    if not course_no or not name:
+        return None
+    return {
+        "courseNo": course_no,
+        "permanentNo": permanent_no,
+        "nameZh": name,
+        "units": [department] if department else [],
+        "teachers": teachers,
+        "source": source,
+    }
+
+
+def nycu_term_rows(year: int, semester: int) -> tuple[list[dict], int]:
+    """Read one NYCU term exclusively from its university-owned sitemap/pages."""
+    raw_term = f"{year}{semester}"
+    sitemap_url = f"{NYCU_OFFICIAL_SITE}/sitemap/{year}/{semester}.xml?page=1"
+    sitemap_payload = cached_request(
+        f"nycu-{raw_term}-sitemap.xml", sitemap_url, timeout=90, minimum_size=200,
+    )
+    root = ET.fromstring(sitemap_payload)
+    official_pages = sorted({
+        official_url("nycu", (node.text or "").strip())
+        for node in root.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")
+        if (node.text or "").strip().startswith(f"{NYCU_OFFICIAL_SITE}/course/{year}/{semester}/")
+    })
+    if not official_pages:
+        raise ValueError(f"NYCU official sitemap is empty for {raw_term}")
+
+    rows: list[dict] = []
+    failures = 0
+
+    def fetch(source: str) -> dict | None:
+        for attempt in range(3):
+            try:
+                return nycu_course_page(source, year, semester)
+            except (TimeoutError, urllib.error.URLError, urllib.error.HTTPError):
+                if attempt == 2:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
+        return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(fetch, source): source for source in official_pages}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                row = future.result()
+                if row:
+                    rows.append(row)
+                else:
+                    failures += 1
+            except Exception:
+                failures += 1
+    if len(rows) < max(1, int(len(official_pages) * 0.95)):
+        raise ValueError(
+            f"NYCU official page coverage too low for {raw_term}: "
+            f"{len(rows)}/{len(official_pages)}"
+        )
+    return rows, failures
+
+
+def parse_nycu(active: dict[str, dict], report: dict) -> list[dict]:
+    downloaded: list[tuple[int, int, list[dict], int]] = []
+    term_pairs = [(CURRENT_YEAR, 1)] + [pair for pair in TERM_PAIRS if pair != (CURRENT_YEAR, 1)]
+
+    def fetch(pair: tuple[int, int]):
+        year, semester = pair
+        return year, semester, *nycu_term_rows(year, semester)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(fetch, pair): pair for pair in term_pairs}
+        for future in concurrent.futures.as_completed(futures):
+            year, semester = futures[future]
+            term = f"{year}-{semester}"
+            try:
+                downloaded.append(future.result())
+                report["availableTerms"].append(term)
+            except Exception as error:
+                report["missingTerms"].append(term)
+                report.setdefault("fetchErrors", []).append(f"{term}: {type(error).__name__}")
+
+    department_sites = load_department_sites("nycu")
+    current = next((item for item in downloaded if item[0:2] == (CURRENT_YEAR, 1)), None)
+    if current:
+        year, semester, rows, _ = current
+        for row in rows:
+            course_no = normalize_space(row.get("courseNo"))
+            source = normalize_space(row.get("source"))
+            if not course_no or not source:
+                continue
+            department = normalize_space((row.get("units") or [""])[0]) or "共同課程"
+            for teacher in split_instructors("、".join(row.get("teachers") or [])):
+                active.setdefault(teacher, {
+                    "name": teacher,
+                    "department": department,
+                    "sourceUrl": official_url("nycu", source),
+                })
+
+    parsed = []
+    for year, semester, rows, failures in sorted(downloaded):
+        term = f"{year}-{semester}"
+        if failures:
+            report.setdefault("pageParseFailures", {})[term] = failures
+        for row in rows:
+            report["parsedOfferings"] += 1
+            course_no = normalize_space(row.get("courseNo"))
+            source = normalize_space(row.get("source"))
+            name = normalize_space(row.get("nameZh"))
+            teachers = split_instructors("、".join(row.get("teachers") or []))
+            active_rows = [active[teacher] for teacher in teachers if teacher in active]
+            if not course_no or not source or not name or "專題研究" in name or not active_rows:
+                report["rejectedWithoutCurrentFaculty"] += 1
+                continue
+            permanent_no = normalize_space(row.get("permanentNo"))
+            code = permanent_no or f"{year}{semester}-{course_no}"
+            department = normalize_space((row.get("units") or [""])[0]) or active_rows[0]["department"]
+            parsed.append({
+                "universityId": "nycu", "term": term, "courseCode": code, "name": name,
+                "department": department, "officialSourceUrl": official_url("nycu", source),
+                "departmentSourceUrl": department_url("nycu", department, active_rows, department_sites),
+                "instructors": active_rows,
+            })
+    report["availableTerms"] = sorted(set(report["availableTerms"]))
+    report["missingTerms"] = sorted(set(report["missingTerms"]))
+    return parsed
+
+
+def strip_html_fragment(value: str) -> str:
+    value = re.sub(r"<br\s*/?>", " ", value, flags=re.I)
+    return normalize_space(re.sub(r"<[^>]+>", " ", html.unescape(value)))
+
+
+def nchu_page_rows(page: str, department: str) -> list[dict]:
+    rows = []
+    # NCHU's public table omits most closing </tr> tags, so a conventional
+    # row regex silently collapses an entire department into one record.
+    blocks = re.split(r'<tr[^>]*class=["\']trall["\'][^>]*>', page, flags=re.I)[1:]
+    for raw_block in blocks:
+        block = re.split(
+            r'<tr[^>]*class=["\']trall["\']|</tbody>|</table>',
+            raw_block,
+            maxsplit=1,
+            flags=re.I,
+        )[0]
+        link = re.search(
+            r'href=["\']([^"\']*Syllabus_main\?v_strm=(\d+)&(?:amp;)?v_class_nbr=(\d+)[^"\']*)["\'][^>]*>([^<]+)</a>',
+            block,
+            flags=re.I | re.S,
+        )
+        course_cell = re.search(
+            r'<td[^>]*data-label=["\']科目名稱["\'][^>]*>(.*?)</td>', block, flags=re.I | re.S,
+        )
+        teacher_cells = re.findall(
+            r'<td(?P<attrs>[^>]*)data-label=["\'](?:上課教師|實習教師)["\'][^>]*>(?P<body>.*?)</td>',
+            block,
+            flags=re.I | re.S,
+        )
+        if not link or not course_cell or not teacher_cells:
+            continue
+        name_fragment = re.split(r'<span[^>]*class=["\']mobile-course-number["\']', course_cell.group(1), maxsplit=1, flags=re.I)[0]
+        name = strip_html_fragment(name_fragment)
+        teachers = []
+        for attrs, body in teacher_cells:
+            title = re.search(r'title=["\']([^"\']*)["\']', attrs, flags=re.I)
+            teacher_text = html.unescape(title.group(1)) if title else strip_html_fragment(body)
+            for teacher in split_instructors(teacher_text.removesuffix("等")):
+                if teacher not in teachers:
+                    teachers.append(teacher)
+        code = normalize_space(strip_html_fragment(link.group(4)))
+        department_cell = re.search(
+            r'<td[^>]*data-label=["\']開課單位["\'][^>]*>(.*?)</td>',
+            block,
+            flags=re.I | re.S,
+        )
+        row_department = strip_html_fragment(department_cell.group(1)) if department_cell else department
+        if not name or not code or not teachers or "專題研究" in name:
+            continue
+        source = urljoin("https://onepiece.nchu.edu.tw/cofsys/plsql/", html.unescape(link.group(1)))
+        rows.append({
+            "term": f"{link.group(2)[:3]}-{link.group(2)[3]}",
+            "courseCode": code,
+            "name": name,
+            "department": row_department or department,
+            "teachers": teachers,
+            "officialSourceUrl": source,
+        })
+    return rows
+
+
+def parse_nchu(active: dict[str, dict], report: dict) -> list[dict]:
+    raw_term = f"{CURRENT_YEAR}1"
+    base = "https://onepiece.nchu.edu.tw/cofsys/plsql/"
+    home = cached_request(
+        f"nchu-{raw_term}-home.html", base + "crseqry_home2", timeout=60, minimum_size=500,
+    ).decode("utf-8", "replace")
+    token_match = re.search(rf'<option[^>]*value=["\']([^"\']+)["\'][^>]*>{raw_term}</option>', home, flags=re.I)
+    if not token_match:
+        raise RuntimeError("NCHU current-term token is unavailable")
+    year_token = token_match.group(1)
+    jobs: list[tuple[str, str, str]] = []
+    for career in ("U", "G", "D", "R", "W", "N"):
+        body = urllib.parse.urlencode({"v_year": year_token, "v_career": career, "v_excel": "0"}).encode()
+        page = cached_request(
+            f"nchu-{raw_term}-{career}-departments.html",
+            base + "crseqry_home2_now",
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=60,
+            minimum_size=500,
+        ).decode("utf-8", "replace")
+        for code, label in re.findall(r'<option[^>]*value=["\']([^"\']+)["\'][^>]*>([^<]+)</option>', page, flags=re.I):
+            label = normalize_space(html.unescape(label))
+            if not code.startswith(career) or label == career:
+                continue
+            department = normalize_space(re.sub(rf"^{re.escape(code)}\s*", "", label))
+            if department:
+                jobs.append((career, code, department))
+
+    def fetch(job: tuple[str, str, str]) -> tuple[str, str, str | None]:
+        career, code, department = job
+        body = urllib.parse.urlencode({
+            "v_year": year_token, "v_career": career, "v_dept": code, "v_level": "",
+            "v_text": "", "v_teach": "", "v_week": "", "v_mtg": "", "v_lang": "",
+            "v_excel": "0", "v_emi": "",
+        }).encode()
+        try:
+            payload = cached_request(
+                f"nchu-{raw_term}-{career}-{code}.html",
+                base + "crseqry_home2_now",
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=90,
+                minimum_size=500,
+            )
+            return payload.decode("utf-8", "replace"), department, None
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError) as error:
+            return "", department, type(error).__name__
+
+    source_rows = []
+    failed_queries = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+        for page, department, error_name in executor.map(fetch, jobs):
+            if error_name:
+                failed_queries.append({"department": department, "error": error_name})
+                continue
+            source_rows.extend(nchu_page_rows(page, department))
+
+    department_sites = load_department_sites("nchu")
+    for row in source_rows:
+        for teacher in row["teachers"]:
+            active.setdefault(teacher, {
+                "name": teacher,
+                "department": row["department"],
+                "sourceUrl": official_url("nchu", row["officialSourceUrl"]),
+            })
+
+    parsed = []
+    for row in source_rows:
+        report["parsedOfferings"] += 1
+        active_rows = [active[teacher] for teacher in row["teachers"] if teacher in active]
+        if not active_rows:
+            report["rejectedWithoutCurrentFaculty"] += 1
+            continue
+        parsed.append({
+            "universityId": "nchu", "term": row["term"], "courseCode": row["courseCode"],
+            "name": row["name"], "department": row["department"],
+            "officialSourceUrl": official_url("nchu", row["officialSourceUrl"]),
+            "departmentSourceUrl": department_url("nchu", row["department"], active_rows, department_sites),
+            "instructors": active_rows,
+        })
+    report["availableTerms"] = [f"{CURRENT_YEAR}-1"]
+    report["missingTerms"] = [f"{year}-{semester}" for year, semester in TERM_PAIRS if (year, semester) != (CURRENT_YEAR, 1)]
+    report["officialDepartmentQueries"] = len(jobs)
+    report["failedDepartmentQueries"] = failed_queries
+    return parsed
+
+
+def ntust_department_map() -> dict[str, str]:
+    colleges = cached_json_request(
+        "ntust-1151-colleges.json", f"{NTUST_API}/Colleges/1151", timeout=60,
+    )
+    mapping: dict[str, str] = {}
+    for college in colleges if isinstance(colleges, list) else []:
+        college_no = normalize_space(college.get("CollegeNo"))
+        if not college_no:
+            continue
+        departments = cached_json_request(
+            f"ntust-1151-departments-{college_no}.json",
+            f"{NTUST_API}/departments?collegeNo={urllib.parse.quote(college_no)}",
+            timeout=60,
+        )
+        for row in departments if isinstance(departments, list) else []:
+            code = normalize_space(row.get("DeptNo"))
+            name = normalize_space(row.get("Department"))
+            if code and name:
+                mapping[code] = name
+    return mapping
+
+
+def ntust_query(term: str) -> list[dict]:
+    payload = {
+        "Semester": term, "CourseNo": "", "CourseName": "", "CourseTeacher": "",
+        "Dimension": "", "CourseNotes": "", "CampusNotes": "", "ForeignLanguage": 0,
+        "OnlyIntensive": 0, "OnlyGeneral": 0, "OnleyNTUST": 1,
+        "OnlyMaster": 0, "OnlyUnderGraduate": 0, "OnlyNode": 1, "Language": "zh",
+    }
+    result = cached_json_request(
+        f"ntust-{term}-courses.json", f"{NTUST_API}/courses",
+        data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8", "Referer": "https://querycourse.ntust.edu.tw/querycourse/"},
+        timeout=180,
+    )
+    return [row for row in result if isinstance(row, dict)] if isinstance(result, list) else []
+
+
+def parse_ntust(active: dict[str, dict], report: dict) -> list[dict]:
+    department_codes = ntust_department_map()
+    downloaded: list[tuple[str, list[dict]]] = []
+    raw_terms = [f"{CURRENT_YEAR}1"] + [f"{year}{semester}" for year, semester in TERM_PAIRS if (year, semester) != (CURRENT_YEAR, 1)]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(ntust_query, term): term for term in raw_terms}
+        for future in concurrent.futures.as_completed(futures):
+            raw_term = futures[future]
+            term = f"{raw_term[:3]}-{raw_term[3]}"
+            try:
+                rows = future.result()
+                if not rows:
+                    raise ValueError("empty official course response")
+                downloaded.append((raw_term, rows))
+                report["availableTerms"].append(term)
+            except Exception as error:
+                report["missingTerms"].append(term)
+                report.setdefault("fetchErrors", []).append(f"{term}: {type(error).__name__}")
+
+    def resolve_department(course_no: str, fallback: str = "") -> str:
+        matches = [(len(code), name) for code, name in department_codes.items() if course_no.startswith(code)]
+        return max(matches)[1] if matches else fallback or "共同課程"
+
+    current = next((rows for term, rows in downloaded if term == f"{CURRENT_YEAR}1"), [])
+    for row in current:
+        course_no = normalize_space(row.get("CourseNo"))
+        department = resolve_department(course_no)
+        source = f"https://querycourse.ntust.edu.tw/QueryCourse/?CourseNo={urllib.parse.quote(course_no)}&Semester={CURRENT_YEAR}1"
+        for teacher in split_instructors(row.get("CourseTeacher")):
+            active.setdefault(teacher, {
+                "name": teacher,
+                "department": department,
+                "sourceUrl": official_url("ntust", source),
+            })
+
+    department_sites = load_department_sites("ntust")
+    parsed = []
+    for raw_term, rows in sorted(downloaded):
+        term = f"{raw_term[:3]}-{raw_term[3]}"
+        for row in rows:
+            report["parsedOfferings"] += 1
+            course_no = normalize_space(row.get("CourseNo"))
+            name = normalize_space(row.get("CourseName"))
+            teachers = split_instructors(row.get("CourseTeacher"))
+            active_rows = [active[teacher] for teacher in teachers if teacher in active]
+            if not course_no or not name or "專題研究" in name or not active_rows:
+                report["rejectedWithoutCurrentFaculty"] += 1
+                continue
+            department = resolve_department(course_no, active_rows[0]["department"])
+            source = f"https://querycourse.ntust.edu.tw/QueryCourse/?CourseNo={urllib.parse.quote(course_no)}&Semester={raw_term}"
+            parsed.append({
+                "universityId": "ntust", "term": term, "courseCode": course_no, "name": name,
+                "department": department, "officialSourceUrl": official_url("ntust", source),
+                "departmentSourceUrl": department_url("ntust", department, active_rows, department_sites),
+                "instructors": active_rows,
+            })
+    report["availableTerms"] = sorted(set(report["availableTerms"]))
+    report["missingTerms"] = sorted(set(report["missingTerms"]))
     return parsed
 
 
@@ -1019,6 +1499,8 @@ def course_id(row: dict) -> str:
 def deduplicate(rows: list[dict]) -> list[dict]:
     merged = {}
     for row in rows:
+        if "專題研究" in normalize_space(row.get("name")):
+            continue
         key = (row["universityId"], row["courseCode"])
         current = merged.get(key)
         if current is None:
@@ -1049,30 +1531,84 @@ def sql_quote(value: object) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def committed_migration_names() -> set[str]:
+    """List migrations committed in HEAD, ignoring index/worktree-only files."""
+    result = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", "HEAD", "--", "drizzle"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        detail = normalize_space(result.stderr or result.stdout)[:300]
+        raise RuntimeError(f"cannot verify committed migration immutability: {detail}")
+    return {
+        Path(line).name
+        for line in result.stdout.splitlines()
+        if normalize_space(line)
+    }
+
+
 def write_course_migrations(courses: list[dict], checked_at: str) -> list[str]:
+    """Return the immutable base migration set; deployed migrations are never rewritten."""
+    del courses, checked_at
+    files = [f"{number:04d}_official_course_history_part_{number - 14:02d}.sql" for number in range(15, 21)]
+    missing = [name for name in files if not (ROOT / "drizzle" / name).is_file()]
+    if missing:
+        raise FileNotFoundError(f"immutable base course migrations are missing: {missing}")
+    return files
+
+
+def write_niu_migrations(courses: list[dict], checked_at: str) -> list[str]:
+    """Return the immutable NIU migration; deployed migrations are never rewritten."""
+    del courses, checked_at
+    name = "0052_niu_official_course_history_part_01.sql"
+    if not (ROOT / "drizzle" / name).is_file():
+        raise FileNotFoundError(f"immutable NIU migration is missing: {name}")
+    return [name]
+
+
+def write_completion_migrations(courses: list[dict], checked_at: str, target_schools: tuple[str, ...]) -> list[str]:
+    """Generate one immutable, explicitly versioned coverage migration batch."""
+    selected = [row for row in courses if row["universityId"] in target_schools]
+    if not selected:
+        raise ValueError("completion migration has no selected courses")
+    timestamp = checked_at.replace("+00:00", ".000Z")
+    school_list = ", ".join(sql_quote(school) for school in target_schools)
     blocks = [
-        "-- Remove obsolete unrated seed rows before replacing them with the verified history snapshot.\n"
-        "DELETE FROM course_instructors WHERE course_id IN (SELECT id FROM courses WHERE NOT EXISTS (SELECT 1 FROM course_ratings WHERE course_id = courses.id));\n"
+        "-- Remove the explicitly excluded official category only within this batch's schools.\n"
+        f"DELETE FROM course_ratings WHERE course_id IN (SELECT id FROM courses WHERE university_id IN ({school_list}) AND source_type = 'official' AND name LIKE '%專題研究%');\n"
         "--> statement-breakpoint\n"
-        "DELETE FROM courses WHERE NOT EXISTS (SELECT 1 FROM course_ratings WHERE course_id = courses.id);\n"
+        f"DELETE FROM course_instructors WHERE course_id IN (SELECT id FROM courses WHERE university_id IN ({school_list}) AND source_type = 'official' AND name LIKE '%專題研究%');\n"
+        "--> statement-breakpoint\n"
+        f"DELETE FROM courses WHERE university_id IN ({school_list}) AND source_type = 'official' AND name LIKE '%專題研究%';\n"
+        "--> statement-breakpoint\n"
+        "-- Replace only unrated official rows in the schools covered by this snapshot.\n"
+        f"DELETE FROM course_instructors WHERE course_id IN (SELECT c.id FROM courses c WHERE c.university_id IN ({school_list}) AND c.source_type = 'official' AND NOT EXISTS (SELECT 1 FROM course_ratings cr WHERE cr.course_id = c.id));\n"
+        "--> statement-breakpoint\n"
+        f"DELETE FROM courses WHERE university_id IN ({school_list}) AND source_type = 'official' AND NOT EXISTS (SELECT 1 FROM course_ratings cr WHERE cr.course_id = courses.id);\n"
         "--> statement-breakpoint\n",
     ]
-    timestamp = checked_at.replace("+00:00", ".000Z")
-    for start in range(0, len(courses), 20):
+    for start in range(0, len(selected), 20):
         values = []
-        for row in courses[start:start + 20]:
+        for row in selected[start:start + 20]:
+            semester = row["term"].rsplit("-", 1)[-1]
             values.append("(" + ", ".join(sql_quote(value) for value in (
                 row["id"], row["universityId"], row["term"], row["firstTerm"], row["lastTerm"],
                 ",".join(row["offeredTerms"]), row["courseCode"], row["name"], row["department"],
                 row["officialSourceUrl"], row["departmentSourceUrl"], timestamp, timestamp,
+                semester, "official",
             )) + ")")
         blocks.append("\n".join([
-            "INSERT INTO courses (id, university_id, term, first_term, last_term, offered_terms, course_code, name, department, official_source_url, department_source_url, created_at, updated_at) VALUES",
+            "INSERT INTO courses (id, university_id, term, first_term, last_term, offered_terms, course_code, name, department, official_source_url, department_source_url, created_at, updated_at, semester, source_type) VALUES",
             ",\n".join(values),
-            "ON CONFLICT(id) DO UPDATE SET term=excluded.term, first_term=excluded.first_term, last_term=excluded.last_term, offered_terms=excluded.offered_terms, course_code=excluded.course_code, name=excluded.name, department=excluded.department, official_source_url=excluded.official_source_url, department_source_url=excluded.department_source_url, updated_at=excluded.updated_at;",
+            "ON CONFLICT(id) DO UPDATE SET term=excluded.term, first_term=excluded.first_term, last_term=excluded.last_term, offered_terms=excluded.offered_terms, course_code=excluded.course_code, name=excluded.name, department=excluded.department, official_source_url=excluded.official_source_url, department_source_url=excluded.department_source_url, semester=excluded.semester, source_type='official', updated_at=excluded.updated_at;",
             "--> statement-breakpoint\n",
         ]))
-    instructors = [(row, instructor) for row in courses for instructor in row["instructors"]]
+
+    instructors = [(row, instructor) for row in selected for instructor in row["instructors"]]
     for start in range(0, len(instructors), 40):
         values = []
         for row, instructor in instructors[start:start + 40]:
@@ -1090,100 +1626,75 @@ def write_course_migrations(courses: list[dict], checked_at: str) -> list[str]:
             "ON CONFLICT(course_id, instructor_name) DO UPDATE SET professor_id=excluded.professor_id, official_source_url=excluded.official_source_url;",
             "--> statement-breakpoint\n",
         ]))
-
-    migration_dir = ROOT / "drizzle"
-    for old in migration_dir.glob("[0-9][0-9][0-9][0-9]_official_course_history*.sql"):
-        old.unlink()
-    header = "-- Generated by scripts/import-official-course-history.py from official university sources only.\n"
-    max_bytes = 6 * 1024 * 1024
-    files = []
-    current = header
-    for block in blocks:
-        if len(current.encode("utf-8")) + len(block.encode("utf-8")) > max_bytes and current != header:
-            number = 15 + len(files)
-            name = f"{number:04d}_official_course_history_part_{len(files) + 1:02d}.sql"
-            (migration_dir / name).write_text(current, encoding="utf-8")
-            files.append(name)
-            current = header
-        current += block
-    if current != header:
-        number = 15 + len(files)
-        name = f"{number:04d}_official_course_history_part_{len(files) + 1:02d}.sql"
-        (migration_dir / name).write_text(current, encoding="utf-8")
-        files.append(name)
-    return files
-
-
-def write_niu_migrations(courses: list[dict], checked_at: str) -> list[str]:
-    """Write an incremental NIU migration for already deployed databases."""
-    niu_courses = [row for row in courses if row["universityId"] == "niu"]
-    timestamp = checked_at.replace("+00:00", ".000Z")
-    blocks = [
-        "-- Replace only unrated NIU seed cards; published user ratings remain intact.\n"
-        "DELETE FROM course_instructors WHERE course_id IN (SELECT id FROM courses WHERE university_id = 'niu' AND NOT EXISTS (SELECT 1 FROM course_ratings WHERE course_id = courses.id));\n"
-        "--> statement-breakpoint\n"
-        "DELETE FROM courses WHERE university_id = 'niu' AND NOT EXISTS (SELECT 1 FROM course_ratings WHERE course_id = courses.id);\n"
-        "--> statement-breakpoint\n",
-    ]
-    for start in range(0, len(niu_courses), 20):
-        values = []
-        for row in niu_courses[start:start + 20]:
-            values.append("(" + ", ".join(sql_quote(value) for value in (
-                row["id"], row["universityId"], row["term"], row["firstTerm"], row["lastTerm"],
-                ",".join(row["offeredTerms"]), row["courseCode"], row["name"], row["department"],
-                row["officialSourceUrl"], row["departmentSourceUrl"], timestamp, timestamp,
-            )) + ")")
-        blocks.append("\n".join([
-            "INSERT INTO courses (id, university_id, term, first_term, last_term, offered_terms, course_code, name, department, official_source_url, department_source_url, created_at, updated_at) VALUES",
-            ",\n".join(values),
-            "ON CONFLICT(id) DO UPDATE SET term=excluded.term, first_term=excluded.first_term, last_term=excluded.last_term, offered_terms=excluded.offered_terms, course_code=excluded.course_code, name=excluded.name, department=excluded.department, official_source_url=excluded.official_source_url, department_source_url=excluded.department_source_url, updated_at=excluded.updated_at;",
-            "--> statement-breakpoint\n",
-        ]))
-    instructors = [(row, instructor) for row in niu_courses for instructor in row["instructors"]]
-    for start in range(0, len(instructors), 40):
-        values = []
-        for row, instructor in instructors[start:start + 40]:
-            professor_id = (
-                f"(SELECT id FROM professors WHERE university_id='niu' "
-                f"AND name={sql_quote(instructor['name'])} LIMIT 1)"
-            )
-            values.append("(" + ", ".join((
-                sql_quote(row["id"]), sql_quote(instructor["name"]), professor_id,
-                sql_quote(instructor.get("officialSourceUrl", "")), sql_quote(timestamp),
-            )) + ")")
-        blocks.append("\n".join([
-            "INSERT INTO course_instructors (course_id, instructor_name, professor_id, official_source_url, created_at) VALUES",
-            ",\n".join(values),
-            "ON CONFLICT(course_id, instructor_name) DO UPDATE SET professor_id=excluded.professor_id, official_source_url=excluded.official_source_url;",
-            "--> statement-breakpoint\n",
-        ]))
     blocks.append(
         "INSERT INTO app_runtime_state (key, value, updated_at)\n"
-        "VALUES ('schema_version', '2026-08-29-niu-courses-v1', CURRENT_TIMESTAMP)\n"
+        f"VALUES ('course_coverage_version', {sql_quote(checked_at)}, CURRENT_TIMESTAMP)\n"
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;\n"
         "--> statement-breakpoint\nPRAGMA optimize;\n"
     )
 
     migration_dir = ROOT / "drizzle"
-    for old in migration_dir.glob("[0-9][0-9][0-9][0-9]_niu_official_course_history*.sql"):
-        old.unlink()
-    header = "-- Generated from National Ilan University's official public course export only.\n"
-    max_bytes = 6 * 1024 * 1024
-    files = []
+    if COMPLETION_MIGRATION_BATCH < 1:
+        raise ValueError("COMPLETION_MIGRATION_BATCH must be positive")
+    batch_stem = (
+        "complete_official_course_coverage"
+        if COMPLETION_MIGRATION_BATCH == 1
+        else f"complete_official_course_coverage_batch_{COMPLETION_MIGRATION_BATCH:02d}"
+    )
+    batch_name_pattern = re.compile(
+        rf"^\d{{4}}_{re.escape(batch_stem)}_part_\d+\.sql$"
+    )
+    committed_batch = sorted(
+        name for name in committed_migration_names()
+        if batch_name_pattern.fullmatch(name)
+    )
+    if committed_batch:
+        raise RuntimeError(
+            f"completion batch {COMPLETION_MIGRATION_BATCH} already has committed migrations "
+            f"({', '.join(committed_batch)}); bump COMPLETION_MIGRATION_BATCH"
+        )
+
+    pattern = f"[0-9][0-9][0-9][0-9]_{batch_stem}_part_*.sql"
+    current_batch = sorted(migration_dir.glob(pattern))
+    current_names = {path.name for path in current_batch}
+    current_numbers = [int(path.name[:4]) for path in current_batch]
+    other_numbers = [
+        int(match.group(1))
+        for path in migration_dir.glob("[0-9][0-9][0-9][0-9]_*.sql")
+        if path.name not in current_names and (match := re.match(r"(\d{4})_", path.name))
+    ]
+    start_number = min(current_numbers) if current_numbers else max(other_numbers, default=0) + 1
+    header = "-- Append-only official course coverage generated from university-owned public sources.\n"
+    max_bytes = 850 * 1024
+    chunks: list[str] = []
     current = header
     for block in blocks:
         if len(current.encode("utf-8")) + len(block.encode("utf-8")) > max_bytes and current != header:
-            number = 52 + len(files)
-            name = f"{number:04d}_niu_official_course_history_part_{len(files) + 1:02d}.sql"
-            (migration_dir / name).write_text(current, encoding="utf-8")
-            files.append(name)
+            chunks.append(current)
             current = header
         current += block
     if current != header:
-        number = 52 + len(files)
-        name = f"{number:04d}_niu_official_course_history_part_{len(files) + 1:02d}.sql"
-        (migration_dir / name).write_text(current, encoding="utf-8")
-        files.append(name)
+        chunks.append(current)
+
+    files = [
+        f"{start_number + index:04d}_{batch_stem}_part_{index + 1:02d}.sql"
+        for index in range(len(chunks))
+    ]
+    occupied_numbers = set(other_numbers)
+    collisions = [
+        name for index, name in enumerate(files)
+        if start_number + index in occupied_numbers
+    ]
+    if collisions:
+        raise RuntimeError(
+            f"completion batch would collide with existing migrations ({', '.join(collisions)}); "
+            "bump COMPLETION_MIGRATION_BATCH"
+        )
+
+    for path in current_batch:
+        path.unlink()
+    for name, content in zip(files, chunks, strict=True):
+        (migration_dir / name).write_text(content, encoding="utf-8")
     return files
 
 
@@ -1191,15 +1702,38 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     active = load_active_faculty()
     checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    reports = {school: {**status, "universityId": school, "checkedAt": checked_at, "parsedOfferings": 0, "verifiedOfferings": 0, "rejectedWithoutCurrentFaculty": 0, "availableTerms": [], "missingTerms": []} for school, status in COURSE_SOURCE_STATUS.items()}
+    reports = {
+        school: {
+            **status,
+            "universityId": school,
+            "checkedAt": checked_at,
+            "parsedOfferings": 0,
+            "verifiedOfferings": 0,
+            "rejectedWithoutCurrentFaculty": 0,
+            "availableTerms": [],
+            "missingTerms": (
+                [f"{year}-{semester}" for year, semester in TERM_PAIRS]
+                if status["status"] == "restricted"
+                else []
+            ),
+        }
+        for school, status in COURSE_SOURCE_STATUS.items()
+    }
     rows = []
     rows.extend(parse_ntu(active["ntu"], reports["ntu"]))
     rows.extend(parse_nthu(active["nthu"], reports["nthu"]))
+    rows.extend(parse_nycu(active["nycu"], reports["nycu"]))
     rows.extend(parse_ncu(active["ncu"], reports["ncu"]))
+    rows.extend(parse_nchu(active["nchu"], reports["nchu"]))
     rows.extend(parse_ccu(active["ccu"], reports["ccu"]))
+    rows.extend(parse_ntust(active["ntust"], reports["ntust"]))
     rows.extend(parse_ntut(active["ntut"], reports["ntut"]))
     rows.extend(parse_niu(active["niu"], reports["niu"]))
-    rows.extend(current_verified_fallbacks())
+    covered_schools = {row["universityId"] for row in rows}
+    rows.extend(
+        row for row in current_verified_fallbacks()
+        if row["universityId"] not in covered_schools
+    )
     courses = deduplicate(rows)
     by_school = defaultdict(list)
     for course in courses:
@@ -1225,10 +1759,19 @@ def main() -> None:
         },
         "checkedAt": checked_at,
         "courseCount": len(courses),
+        "baseSnapshotCourseCount": 37_625,
+        "completionCourseCount": sum(
+            len(by_school[school]) for school in ("nthu", "nycu", "nchu", "ntust")
+        ),
         "schools": list(reports.values()),
     }
     report_payload["courseMigrationFiles"] = write_course_migrations(courses, checked_at)
     report_payload["niuMigrationFiles"] = write_niu_migrations(courses, checked_at)
+    report_payload["completionMigrationFiles"] = write_completion_migrations(
+        courses,
+        checked_at,
+        ("nthu", "nycu", "nchu", "ntust"),
+    )
     (DB / "course-import-report.generated.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"courses": len(courses), "bySchool": {school: len(values) for school, values in by_school.items()}}, ensure_ascii=False), flush=True)
 

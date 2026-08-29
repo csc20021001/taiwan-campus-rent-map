@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import {
+  isLegacyCourseRatingOneToFiveSchema,
+  legacyCourseRatingUpgradeStatements,
+} from '../db/course-rating-upgrade.mjs';
 
 const scaleMigration = readFileSync(new URL('../drizzle/0053_course_rating_scale_0_100.sql', import.meta.url), 'utf8')
   .split('--> statement-breakpoint')
@@ -94,6 +98,108 @@ test('0–100 migrations preserve rows and restore the five rating dimensions', 
   assert.throws(() => database.prepare(`INSERT INTO course_ratings VALUES
     ('rating-6', 'course-1', '趙老師', 'user-1', 50.5, 50, 50, 'now', 'now', 50, 50)`).run());
   assert.equal(database.prepare("SELECT value FROM app_runtime_state WHERE key = 'schema_version'").get().value, '2026-08-29-course-rating-five-dimensions-v1');
+  database.close();
+});
+
+test('runtime fallback safely upgrades the teacher-specific 1–5 table from migration 0024', () => {
+  const database = new DatabaseSync(':memory:');
+  database.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL);
+    CREATE TABLE courses (id TEXT PRIMARY KEY NOT NULL);
+    CREATE TABLE course_ratings (
+      id TEXT PRIMARY KEY NOT NULL,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      instructor_name TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      learning_score INTEGER NOT NULL CHECK (learning_score BETWEEN 1 AND 5),
+      workload_score INTEGER NOT NULL CHECK (workload_score BETWEEN 1 AND 5),
+      exam_difficulty_score INTEGER NOT NULL CHECK (exam_difficulty_score BETWEEN 1 AND 5),
+      grading_standard_score INTEGER NOT NULL CHECK (grading_standard_score BETWEEN 1 AND 5),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (user_id, course_id, instructor_name)
+    );
+    CREATE INDEX idx_course_ratings_course ON course_ratings(course_id, instructor_name);
+    CREATE INDEX idx_course_ratings_user ON course_ratings(user_id);
+    CREATE UNIQUE INDEX idx_course_ratings_user_course_instructor
+      ON course_ratings(user_id, course_id, instructor_name);
+    INSERT INTO users VALUES ('user-1'), ('user-2');
+    INSERT INTO courses VALUES ('course-1');
+    INSERT INTO course_ratings VALUES
+      ('rating-1', 'course-1', '王老師', 'user-1', 1, 2, 3, 4, 'created-1', 'updated-1'),
+      ('rating-2', 'course-1', '李老師', 'user-2', 5, 4, 2, 1, 'created-2', 'updated-2');
+  `);
+
+  const columns = database.prepare('PRAGMA table_info(course_ratings)').all().map((column) => column.name);
+  const createSql = database.prepare(`SELECT sql FROM sqlite_master
+    WHERE type = 'table' AND name = 'course_ratings'`).get().sql;
+  assert.equal(isLegacyCourseRatingOneToFiveSchema(columns, createSql), true);
+
+  database.exec('BEGIN');
+  try {
+    for (const statement of legacyCourseRatingUpgradeStatements) database.exec(statement);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+
+  assert.deepEqual(database.prepare(`SELECT id, course_id, instructor_name, user_id,
+      learning_score, workload_score, exam_difficulty_score, grading_standard_score,
+      attendance_frequency_score, created_at, updated_at
+    FROM course_ratings ORDER BY id`).all().map((row) => ({ ...row })), [
+    {
+      id: 'rating-1', course_id: 'course-1', instructor_name: '王老師', user_id: 'user-1',
+      learning_score: 20, workload_score: 40, exam_difficulty_score: 60,
+      grading_standard_score: 80, attendance_frequency_score: null,
+      created_at: 'created-1', updated_at: 'updated-1',
+    },
+    {
+      id: 'rating-2', course_id: 'course-1', instructor_name: '李老師', user_id: 'user-2',
+      learning_score: 100, workload_score: 80, exam_difficulty_score: 40,
+      grading_standard_score: 20, attendance_frequency_score: null,
+      created_at: 'created-2', updated_at: 'updated-2',
+    },
+  ]);
+  assert.deepEqual({ ...database.prepare(`SELECT learning_score, workload_score,
+      exam_difficulty_score, grading_standard_score FROM course_ratings_legacy_1_to_5
+    WHERE id = 'rating-1'`).get() }, {
+    learning_score: 1,
+    workload_score: 2,
+    exam_difficulty_score: 3,
+    grading_standard_score: 4,
+  });
+  database.prepare(`INSERT INTO course_ratings (
+    id, course_id, instructor_name, user_id, learning_score, workload_score,
+    exam_difficulty_score, grading_standard_score, attendance_frequency_score, created_at, updated_at
+  ) VALUES ('rating-3', 'course-1', '林老師', 'user-1', 0, 100, 73, 50, 25, 'now', 'now')`).run();
+  assert.deepEqual({ ...database.prepare(`SELECT learning_score, workload_score,
+      exam_difficulty_score, grading_standard_score, attendance_frequency_score
+    FROM course_ratings WHERE id = 'rating-3'`).get() }, {
+    learning_score: 0,
+    workload_score: 100,
+    exam_difficulty_score: 73,
+    grading_standard_score: 50,
+    attendance_frequency_score: 25,
+  });
+  assert.throws(() => database.prepare(`INSERT INTO course_ratings (
+    id, course_id, instructor_name, user_id, learning_score, workload_score,
+    exam_difficulty_score, grading_standard_score, attendance_frequency_score, created_at, updated_at
+  ) VALUES ('invalid', 'course-1', '陳老師', 'user-1', -1, 50, 50, 50, 50, 'now', 'now')`).run());
+  assert.equal(isLegacyCourseRatingOneToFiveSchema(
+    ['instructor_name', 'learning_score', 'workload_score', 'exam_difficulty_score', 'grading_standard_score'],
+    `CREATE TABLE course_ratings (
+      learning_score INTEGER CHECK (learning_score BETWEEN 0 AND 100),
+      workload_score INTEGER CHECK (workload_score BETWEEN 0 AND 100),
+      exam_difficulty_score INTEGER CHECK (exam_difficulty_score BETWEEN 0 AND 100),
+      grading_standard_score INTEGER CHECK (grading_standard_score BETWEEN 0 AND 100)
+    )`,
+  ), false);
+  assert.equal(isLegacyCourseRatingOneToFiveSchema(
+    database.prepare('PRAGMA table_info(course_ratings)').all().map((column) => column.name),
+    database.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'course_ratings'`).get().sql,
+  ), false);
   database.close();
 });
 

@@ -4,6 +4,10 @@ import * as schema from './schema';
 import { universities } from '../app/data';
 import { professorSeeds } from './professors-seeds.generated';
 import { departmentSeeds } from './department-seeds';
+import {
+  isLegacyCourseRatingOneToFiveSchema,
+  legacyCourseRatingUpgradeStatements,
+} from './course-rating-upgrade.mjs';
 const activeUniversityIds = new Set(universities.map((school) => school.id));
 
 let databaseReady: Promise<void> | null = null;
@@ -105,8 +109,26 @@ async function ensureCourseRatingDimensions() {
   const tableInfo = await db.prepare('PRAGMA table_info(course_ratings)').all<{ name: string }>();
   if (tableInfo.results.length === 0) return;
   const existing = new Set(tableInfo.results.map((column) => column.name));
+  const legacyTable = await db.prepare(`SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name = 'course_ratings_legacy_1_to_5'`).first<{ name: string }>();
+
+  if (!existing.has('attendance_frequency_score')) {
+    const tableDefinition = await db.prepare(`SELECT sql FROM sqlite_master
+      WHERE type = 'table' AND name = 'course_ratings'`).first<{ sql: string | null }>();
+    if (!isLegacyCourseRatingOneToFiveSchema([...existing], tableDefinition?.sql)) {
+      throw new Error('Unsupported legacy course_ratings schema; refusing to mark it as current.');
+    }
+    if (legacyTable) {
+      throw new Error('Cannot upgrade course_ratings because the legacy backup table already exists.');
+    }
+    await db.batch(legacyCourseRatingUpgradeStatements.map((statement) => db.prepare(statement)));
+    return;
+  }
+
   const currentBaseColumns = ['instructor_name', 'workload_score', 'exam_difficulty_score', 'attendance_frequency_score'];
-  if (!currentBaseColumns.every((column) => existing.has(column))) return;
+  if (!currentBaseColumns.every((column) => existing.has(column))) {
+    throw new Error('Unsupported course_ratings schema; refusing to mark it as current.');
+  }
 
   const additions = [
     ['learning_score', `ALTER TABLE course_ratings ADD COLUMN learning_score INTEGER CHECK (
@@ -120,8 +142,6 @@ async function ensureCourseRatingDimensions() {
     if (!existing.has(column)) await db.prepare(sql).run();
   }
 
-  const legacyTable = await db.prepare(`SELECT name FROM sqlite_master
-    WHERE type = 'table' AND name = 'course_ratings_legacy_1_to_5'`).first<{ name: string }>();
   if (legacyTable) {
     await db.prepare(`UPDATE course_ratings
       SET

@@ -50,7 +50,7 @@ test('official course history migration loads the generated snapshot into SQLite
     ntust: 'ntust.edu.tw', ntut: 'ntut.edu.tw', niu: 'niu.edu.tw',
   };
 
-  assert.equal(courseCount, 37625);
+  assert.equal(courseCount, report.baseSnapshotCourseCount);
   assert.ok(instructorCount > courseCount);
   assert.equal(schoolCount, 9);
   assert.equal(range.first, '106-1');

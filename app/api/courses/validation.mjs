@@ -1,3 +1,19 @@
+/**
+ * @typedef {{
+ *   learningScore: number,
+ *   workloadScore: number,
+ *   examDifficultyScore: number,
+ *   gradingStandardScore: number,
+ *   attendanceFrequencyScore: number,
+ * }} CourseRatingValue
+ */
+
+/** @typedef {{ ok: true, value: CourseRatingValue } | { ok: false, error: string }} CourseRatingValidation */
+
+/**
+ * @param {Record<string, unknown>} body
+ * @returns {CourseRatingValidation}
+ */
 export function validateCourseRating(body) {
   const fields = [
     ['learningScore', 'learning_score', '學習收穫'],
@@ -19,7 +35,7 @@ export function validateCourseRating(body) {
     }
     value[camelKey] = score;
   }
-  return { ok: true, value };
+  return { ok: true, value: /** @type {CourseRatingValue} */ (value) };
 }
 
 const officialDomains = {
@@ -29,6 +45,23 @@ const officialDomains = {
   yzu: 'yzu.edu.tw', fcu: 'fcu.edu.tw',
 };
 
+/**
+ * @typedef {{
+ *   universityId: string,
+ *   semester: string,
+ *   department: string,
+ *   name: string,
+ *   instructorName: string,
+ *   officialSourceUrl: string,
+ * }} CourseSubmissionValue
+ */
+
+/** @typedef {{ ok: true, value: CourseSubmissionValue } | { ok: false, error: string }} CourseSubmissionValidation */
+
+/**
+ * @param {Record<string, unknown>} body
+ * @returns {CourseSubmissionValidation}
+ */
 export function validateCourseSubmission(body) {
   const universityId = String(body.universityId ?? body.university_id ?? '').trim().toLowerCase();
   const semester = String(body.semester ?? '').trim();

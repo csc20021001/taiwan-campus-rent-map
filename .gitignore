@@ -43,6 +43,10 @@ next-env.d.ts
 /db/course-seeds.generated.ts
 /.course-cache/
 /.four-school-course-cache/
+/.place-course-cache/
+/.python-packages/
+/.uv-cache/
+/.venv/
 /.research/
 __pycache__/
 *.pyc
