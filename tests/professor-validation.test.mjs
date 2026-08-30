@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { validateCourseRating } from '../app/api/courses/validation.mjs';
+import { validateCourseRating, validateCourseSubmission } from '../app/api/courses/validation.mjs';
 
 const directorySource = readFileSync(new URL('../app/courses/course-directory.tsx', import.meta.url), 'utf8');
 const courseDbSource = readFileSync(new URL('../db/courses.ts', import.meta.url), 'utf8');
@@ -40,4 +40,35 @@ test('course directory exposes university official course, teacher, and departme
   assert.match(directorySource, /target="_blank"/);
   assert.match(courseDbSource, /officialSourceUrl/);
   assert.doesNotMatch(directorySource, /老師態度|attitudeScore|averageAttitude/);
+});
+
+test('every selectable school accepts only its own official HTTPS source', () => {
+  const appData = readFileSync(new URL('../app/data.ts', import.meta.url), 'utf8');
+  const validation = readFileSync(new URL('../app/api/courses/validation.mjs', import.meta.url), 'utf8');
+  const ids = [...appData.matchAll(/id: '([a-z0-9-]+)'/g)].map((match) => match[1]);
+  const domains = new Map([...validation.matchAll(/([a-z]+): '([a-z.]+edu\.tw)'/g)].map((match) => [match[1], match[2]]));
+  assert.ok(ids.length > 0);
+  for (const id of ids) {
+    const domain = domains.get(id);
+    assert.ok(domain, `${id} has no official domain`);
+    const submission = {
+      universityId: id,
+      semester: '1',
+      department: '資訊工程學系',
+      name: '資料結構',
+      instructorName: '王小明',
+      officialSourceUrl: `https://course.${domain}/list`,
+    };
+    assert.equal(validateCourseSubmission(submission).ok, true, `${id} rejects its own official source`);
+    assert.equal(
+      validateCourseSubmission({ ...submission, officialSourceUrl: 'https://example.com/list' }).ok,
+      false,
+      `${id} accepts a non-official source`,
+    );
+    assert.equal(
+      validateCourseSubmission({ ...submission, officialSourceUrl: `http://course.${domain}/list` }).ok,
+      false,
+      `${id} accepts a plain HTTP source`,
+    );
+  }
 });

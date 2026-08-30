@@ -35,11 +35,20 @@ test('place-name course report is material, audited, and migration-sized', () =>
   assert.ok(report.courseCount > 40_000);
   assert.equal(report.schools.length, 28);
   assert.equal(new Set(report.schools.map((school) => school.universityId)).size, 28);
-  for (const id of ['nknu', 'nkuht', 'nptu', 'ntpu', 'tnnua']) {
+  for (const id of ['nknu', 'nptu', 'ntpu', 'tnnua', 'ntcu', 'ntou', 'ntue', 'nttu', 'ntub', 'ntunhs', 'ntus', 'tnua', 'ncue', 'ncyu', 'yuntech', 'utaipei', 'nutc', 'npust']) {
     const school = report.schools.find((entry) => entry.universityId === id);
     assert.ok(school, `missing report for ${id}`);
     assert.ok(school.verifiedCourses > 0, `${id} has no verified courses`);
     assert.ok(school.currentRosterEvidenceTerms.length > 0, `${id} lacks current roster evidence`);
+  }
+  // A school without published courses must say why, never fail silently.
+  for (const school of report.schools) {
+    if (school.verifiedCourses > 0) continue;
+    assert.ok(
+      ['restricted', 'unreachable'].includes(school.status),
+      `${school.universityId} publishes no courses without an audited status`,
+    );
+    assert.ok(school.note, `${school.universityId} publishes no courses without a reason`);
   }
   for (const file of report.migrationFiles) {
     const size = statSync(new URL(`../drizzle/${file}`, import.meta.url)).size;
@@ -62,12 +71,38 @@ test('generated migration batches are immutable after commit but uncommitted bat
   assert.match(committedNames, /git["'],\s*["']ls-tree["']/);
   assert.match(committedNames, /["']HEAD["']/);
   assert.match(writeMigrations, /committed_batch/);
-  assert.match(writeMigrations, /bump BATCH_ID/);
+  assert.match(writeMigrations, /pass a new --batch-id/);
   assert.ok(
     writeMigrations.indexOf('if committed_batch:') < writeMigrations.indexOf('path.unlink()'),
     'the committed-batch guard must run before deleting a generated migration',
   );
   assert.match(writeMigrations, /current_batch = list\(MIGRATIONS\.glob\(pattern\)\)/);
+});
+
+test('course names publish the official first line of a stacked schedule cell', () => {
+  const cleaner = pythonFunction('official_course_name');
+  const dedupe = pythonFunction('deduplicate');
+  assert.match(importer, /CELL_LINE_BREAK = re\.compile/);
+  assert.match(importer, /MERGED_CLASS_NOTE = re\.compile/);
+  assert.match(cleaner, /CELL_LINE_BREAK\.split\(normalize_space\(value\), 1\)\[0\]/);
+  assert.match(cleaner, /MERGED_CLASS_NOTE\.sub/);
+  assert.match(dedupe, /"name": official_course_name\(row\["name"\]\)/);
+  assert.match(dedupe, /if not row\["name"\] or is_excluded_course/);
+});
+
+test('a follow-up batch only rebuilds the schools it actually imported', () => {
+  const writeMigrations = pythonFunction('write_migrations');
+  assert.match(writeMigrations, /target_schools: tuple\[str, \.\.\.\] = \(\)/);
+  assert.match(writeMigrations, /target_schools = tuple\(sorted\(target_schools or SCHOOLS\)\)/);
+  assert.match(writeMigrations, /unknown target schools/);
+  assert.match(importer, /"--only"/);
+  assert.match(importer, /"--batch-id"/);
+  assert.match(importer, /target_schools=tuple\(targets\)/);
+  const merge = pythonFunction('merge_report');
+  assert.match(merge, /report\["universityId"\] not in covered/);
+  assert.ok(
+    Array.isArray(report.batchSchools) === false || report.batchSchools.every((id) => typeof id === 'string'),
+  );
 });
 
 test('migration rebuilds official instructor links without deleting rated course parents', () => {

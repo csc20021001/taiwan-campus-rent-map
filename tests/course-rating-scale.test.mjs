@@ -216,3 +216,25 @@ test('course interface presents five editable 0–100 controls without a combine
   assert.doesNotMatch(source, /averageRating|綜合分數|綜合平均/);
   assert.doesNotMatch(source, /\[1, 2, 3, 4, 5\]/);
 });
+
+test('every rating dimension states what a higher score means', () => {
+  const source = readFileSync(new URL('../app/courses/course-directory.tsx', import.meta.url), 'utf8');
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const dimensions = [
+    { label: '學習收穫', meaning: '這門課帶來的知識與能力收穫越紮實', polarity: 'benefit' },
+    { label: '作業量', meaning: '作業與報告越多、越花時間', polarity: 'intensity' },
+    { label: '考試難度', meaning: '考試越難、越不容易拿分', polarity: 'intensity' },
+    { label: '給分標準', meaning: '老師給分越寬鬆（越甜）', polarity: 'benefit' },
+    { label: '點名頻率', meaning: '越常點名、缺席越容易被記錄', polarity: 'intensity' },
+  ];
+  for (const dimension of dimensions) {
+    assert.ok(source.includes(`分數越高，代表${dimension.meaning}`), `${dimension.label} 缺少高分方向說明`);
+    assert.ok(source.includes(`polarity: '${dimension.polarity}'`), `${dimension.label} 缺少方向標記`);
+    assert.ok(readme.includes(dimension.meaning), `README 缺少 ${dimension.label} 的高分說明`);
+  }
+  assert.match(source, /五項評分越高代表什麼/);
+  assert.match(source, /className="rating-legend"/);
+  assert.match(source, /dimension-meaning/);
+  assert.match(source, /高分不等於好課/);
+  assert.match(readme, /## 五項評分越高代表什麼/);
+});

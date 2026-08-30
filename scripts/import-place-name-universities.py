@@ -7,6 +7,7 @@ when at least one instructor is still present in that roster.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import concurrent.futures
 import hashlib
@@ -561,6 +562,31 @@ def split_instructors(value: object) -> list[str]:
         if name not in result:
             result.append(name)
     return result
+
+
+# ``FormAndTableParser`` and ``DirectTableParser`` mark a ``<br>`` inside a cell
+# with this token, so a course-name cell that stacks the Chinese name above its
+# English translation and its merged-class note arrives as one joined string.
+# A real course name never puts whitespace after an enumeration comma, so the
+# marker followed by a space is always a line break the school printed.
+CELL_LINE_BREAK = re.compile(r"、(?=\s)")
+MERGED_CLASS_NOTE = re.compile(r"[（(][^（()）]*(?:另併|合併|併班|合班)[^（()）]*[）)]\s*$")
+
+
+def official_course_name(value: object) -> str:
+    """Publish the official first line of a course-name cell.
+
+    Only the school's own first line is kept: the English translation and the
+    merged-class note the schedule prints on later lines are dropped, and no
+    text is invented.
+    """
+    name = CELL_LINE_BREAK.split(normalize_space(value), 1)[0]
+    while True:
+        trimmed = normalize_space(MERGED_CLASS_NOTE.sub("", name).rstrip("、 "))
+        if trimmed == name or not trimmed:
+            break
+        name = trimmed
+    return name
 
 
 def is_excluded_course(name: object) -> bool:
@@ -4637,7 +4663,11 @@ def course_id(university_id: str, course_code: str) -> str:
 def deduplicate(offerings: list[dict]) -> list[dict]:
     merged: dict[tuple[str, str], dict] = {}
     for row in offerings:
-        if is_excluded_course(row["name"]):
+        # Schools that stack the Chinese name, the English translation and the
+        # merged-class note in one schedule cell are published under the first
+        # official line only.
+        row = {**row, "name": official_course_name(row["name"])}
+        if not row["name"] or is_excluded_course(row["name"]):
             continue
         key = (row["universityId"], row["courseCode"])
         current = merged.get(key)
@@ -4718,8 +4748,22 @@ def committed_migration_names() -> set[str]:
     }
 
 
-def write_migrations(courses: list[dict], checked_at: str) -> list[str]:
-    target_schools = tuple(sorted(SCHOOLS))
+def write_migrations(
+    courses: list[dict],
+    checked_at: str,
+    batch_id: str = BATCH_ID,
+    target_schools: tuple[str, ...] = (),
+) -> list[str]:
+    """Write one immutable migration batch.
+
+    ``target_schools`` limits the official rows this batch rebuilds, so a later
+    batch that only covers the schools a previous run could not reach never
+    deletes course rows an earlier committed batch already published.
+    """
+    target_schools = tuple(sorted(target_schools or SCHOOLS))
+    unknown = [school for school in target_schools if school not in SCHOOLS]
+    if unknown:
+        raise ValueError(f"unknown target schools: {', '.join(unknown)}")
     school_list = ", ".join(sql_quote(value) for value in target_schools)
     timestamp = checked_at.replace("+00:00", ".000Z")
     blocks = []
@@ -4806,13 +4850,13 @@ def write_migrations(courses: list[dict], checked_at: str) -> list[str]:
 
     blocks.append(
         "INSERT INTO app_runtime_state (key, value, updated_at) VALUES "
-        f"({sql_quote(BATCH_ID)}, {sql_quote(checked_at)}, CURRENT_TIMESTAMP) "
+        f"({sql_quote(batch_id)}, {sql_quote(checked_at)}, CURRENT_TIMESTAMP) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;\n"
         "--> statement-breakpoint\nPRAGMA optimize;\n"
     )
 
     batch_name_pattern = re.compile(
-        rf"^\d{{4}}_{re.escape(BATCH_ID)}_part_\d+\.sql$"
+        rf"^\d{{4}}_{re.escape(batch_id)}_part_\d+\.sql$"
     )
     committed_batch = sorted(
         name for name in committed_migration_names()
@@ -4820,11 +4864,11 @@ def write_migrations(courses: list[dict], checked_at: str) -> list[str]:
     )
     if committed_batch:
         raise RuntimeError(
-            f"{BATCH_ID} already has committed migrations ({', '.join(committed_batch)}); "
-            "bump BATCH_ID before generating another immutable batch"
+            f"{batch_id} already has committed migrations ({', '.join(committed_batch)}); "
+            "pass a new --batch-id before generating another immutable batch"
         )
 
-    pattern = f"[0-9][0-9][0-9][0-9]_{BATCH_ID}_part_*.sql"
+    pattern = f"[0-9][0-9][0-9][0-9]_{batch_id}_part_*.sql"
     current_batch = list(MIGRATIONS.glob(pattern))
     current_names = {path.name for path in current_batch}
     other_numbers = [
@@ -4843,66 +4887,148 @@ def write_migrations(courses: list[dict], checked_at: str) -> list[str]:
     for block in blocks:
         if len(current.encode("utf-8")) + len(block.encode("utf-8")) > max_bytes and current != header:
             number = start_number + len(files)
-            name = f"{number:04d}_{BATCH_ID}_part_{len(files) + 1:02d}.sql"
+            name = f"{number:04d}_{batch_id}_part_{len(files) + 1:02d}.sql"
             (MIGRATIONS / name).write_text(current, encoding="utf-8")
             files.append(name)
             current = header
         current += block
     if current != header:
         number = start_number + len(files)
-        name = f"{number:04d}_{BATCH_ID}_part_{len(files) + 1:02d}.sql"
+        name = f"{number:04d}_{batch_id}_part_{len(files) + 1:02d}.sql"
         (MIGRATIONS / name).write_text(current, encoding="utf-8")
         files.append(name)
     return files
 
 
+IMPORTERS = {
+    "ntnu": lambda: import_ntnu(),
+    "ntcu": lambda: import_ntcu(),
+    "ntue": lambda: import_ntue(),
+    "ntou": lambda: import_ntou(),
+    "ntpu": lambda: import_ntpu(),
+    "nttu": lambda: import_nttu(),
+    "ntub": lambda: import_ntub(),
+    "ntunhs": lambda: import_ntunhs(),
+    "ntus": lambda: import_ntus(),
+    "tnua": lambda: import_tnua(),
+    "tnnua": lambda: import_tnnua(),
+    "ntua": lambda: import_ntua(),
+    "nfu": lambda: import_nfu(),
+    "ncue": lambda: import_ncue(),
+    "nknu": lambda: import_nknu(),
+    "ncyu": lambda: import_ncyu(),
+    "yuntech": lambda: import_yuntech(),
+    "utaipei": lambda: import_utaipei(),
+    "nutc": lambda: import_nutc(),
+    "nuk": lambda: import_nuk(),
+    "nkuht": lambda: import_nkuht(),
+    "nkust": lambda: import_nkust(),
+    "npu": lambda: import_npu(),
+    "npust": lambda: import_npust(),
+    "nptu": lambda: import_nptu(),
+    "nqu": lambda: import_nqu(),
+    "nutn": lambda: import_nutn(),
+    "nou": lambda: import_nou(),
+}
+
+
+def merge_report(payload: dict) -> dict:
+    """Keep audited schools from earlier committed batches in the same report."""
+    path = DB / "place-name-course-report.generated.json"
+    if not path.exists():
+        return payload
+    previous = json.loads(path.read_text(encoding="utf-8"))
+    covered = {report["universityId"] for report in payload["schools"]}
+    retained = [
+        report for report in previous.get("schools", [])
+        if report["universityId"] not in covered
+    ]
+    payload["schools"] = sorted(
+        retained + payload["schools"],
+        key=lambda report: report["universityId"],
+    )
+    payload["batches"] = sorted(
+        {*previous.get("batches", []), *({previous["batchId"]} if previous.get("batchId") else set()), payload["batchId"]}
+    )
+    payload["previousMigrationFiles"] = sorted({
+        *previous.get("previousMigrationFiles", []),
+        *previous.get("migrationFiles", []),
+    })
+    payload["courseCount"] = payload["batchCourseCount"] + sum(
+        report.get("verifiedCourses", 0) for report in retained
+    )
+    return payload
+
+
+def normalize_status(report: dict) -> dict:
+    """Never advertise full coverage while audited terms are still missing."""
+    if report.get("status") == "imported" and report.get("missingTerms"):
+        report["status"] = "partial"
+    return report
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--only",
+        default="",
+        help="comma separated school ids to import; defaults to every audited school",
+    )
+    parser.add_argument(
+        "--batch-id",
+        default=BATCH_ID,
+        help="immutable migration batch name; a committed batch is never rewritten",
+    )
+    arguments = parser.parse_args()
+    selected = [value.strip() for value in arguments.only.split(",") if value.strip()]
+    unknown = [value for value in selected if value not in IMPORTERS]
+    if unknown:
+        parser.error(f"unknown school ids: {', '.join(unknown)}")
+    targets = selected or list(IMPORTERS)
+
     checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     offerings = []
     reports = []
-    for importer in (
-        import_ntnu,
-        import_ntcu,
-        import_ntue,
-        import_ntou,
-        import_ntpu,
-        import_nttu,
-        import_ntub,
-        import_ntunhs,
-        import_ntus,
-        import_tnua,
-        import_tnnua,
-        import_ntua,
-        import_nfu,
-        import_ncue,
-        import_nknu,
-        import_ncyu,
-        import_yuntech,
-        import_utaipei,
-        import_nutc,
-        import_nuk,
-        import_nkuht,
-        import_nkust,
-        import_npu,
-        import_npust,
-        import_nptu,
-        import_nqu,
-        import_nutn,
-        import_nou,
-    ):
-        rows, report = importer()
+    for school_id in targets:
+        try:
+            rows, report = IMPORTERS[school_id]()
+        except Exception as error:
+            # A school whose official endpoint is down is reported as such
+            # instead of aborting the audited batch or inventing rows for it.
+            rows = []
+            report = {
+                "universityId": school_id,
+                "status": "unreachable",
+                "officialIndex": SCHOOLS[school_id]["index"],
+                "availableTerms": [],
+                "missingTerms": [f"{term[:3]}-{term[3]}" for term in TERMS],
+                "officialQueries": 0,
+                "parsedOfferings": 0,
+                "rejectedWithoutCurrentFaculty": 0,
+                "currentRosterEvidenceTerms": [],
+                "fetchErrors": [f"{type(error).__name__}: {normalize_space(error)[:200]}"],
+                "note": "校方公開課程端點在稽核當下無法連線；不改用第三方鏡像或快取補資料。",
+            }
         offerings.extend(rows)
-        reports.append(report)
-        print(f"{report['universityId']}: {len(rows)} verified offerings", flush=True)
+        reports.append(normalize_status(report))
+        print(
+            f"{report['universityId']}: {len(rows)} verified offerings ({report['status']})",
+            flush=True,
+        )
     courses = deduplicate(offerings)
     by_school = defaultdict(int)
     for row in courses:
         by_school[row["universityId"]] += 1
     for report in reports:
         report["verifiedCourses"] = by_school[report["universityId"]]
-    migration_files = write_migrations(courses, checked_at)
-    payload = {
+    migration_files = write_migrations(
+        courses,
+        checked_at,
+        batch_id=arguments.batch_id,
+        target_schools=tuple(targets),
+    )
+    payload = merge_report({
         "policy": {
             "officialUniversityDomainsOnly": True,
             "requiresCurrentOfficialScheduleEvidence": True,
@@ -4910,11 +5036,13 @@ def main() -> None:
             "excludedCourseNames": ["專題研究", "Special Research Project"],
         },
         "checkedAt": checked_at,
-        "batchId": BATCH_ID,
+        "batchId": arguments.batch_id,
+        "batchSchools": sorted(targets),
+        "batchCourseCount": len(courses),
         "courseCount": len(courses),
         "schools": reports,
         "migrationFiles": migration_files,
-    }
+    })
     (DB / "place-name-course-report.generated.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

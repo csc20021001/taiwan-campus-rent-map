@@ -38,11 +38,20 @@ export function validateCourseRating(body) {
   return { ok: true, value: /** @type {CourseRatingValue} */ (value) };
 }
 
+// One official HTTPS domain per selectable school, so a user-submitted source
+// link can only ever point at that university's own site.
 const officialDomains = {
   ntu: 'ntu.edu.tw', nthu: 'nthu.edu.tw', nycu: 'nycu.edu.tw', ncu: 'ncu.edu.tw',
   nchu: 'nchu.edu.tw', ccu: 'ccu.edu.tw', nsysu: 'nsysu.edu.tw', ntust: 'ntust.edu.tw',
   ntut: 'ntut.edu.tw', niu: 'niu.edu.tw', cycu: 'cycu.edu.tw', tku: 'tku.edu.tw',
-  yzu: 'yzu.edu.tw', fcu: 'fcu.edu.tw',
+  yzu: 'yzu.edu.tw', fcu: 'fcu.edu.tw', ntnu: 'ntnu.edu.tw', ntcu: 'ntcu.edu.tw',
+  ntue: 'ntue.edu.tw', ntou: 'ntou.edu.tw', ntpu: 'ntpu.edu.tw', nfu: 'nfu.edu.tw',
+  ncue: 'ncue.edu.tw', nknu: 'nknu.edu.tw', nptu: 'nptu.edu.tw', ncyu: 'ncyu.edu.tw',
+  yuntech: 'yuntech.edu.tw', nuk: 'nuk.edu.tw', nkuht: 'nkuht.edu.tw',
+  nkust: 'nkust.edu.tw', npu: 'npu.edu.tw', npust: 'npust.edu.tw', nqu: 'nqu.edu.tw',
+  nutn: 'nutn.edu.tw', nou: 'nou.edu.tw', nutc: 'nutc.edu.tw', nttu: 'nttu.edu.tw',
+  tnua: 'tnua.edu.tw', tnnua: 'tnnua.edu.tw', ntub: 'ntub.edu.tw', ntua: 'ntua.edu.tw',
+  ntunhs: 'ntunhs.edu.tw', ntus: 'ntus.edu.tw', utaipei: 'utaipei.edu.tw',
 };
 
 /**

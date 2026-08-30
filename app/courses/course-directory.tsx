@@ -55,14 +55,41 @@ const ratingDimensions: Array<{
   label: string;
   low: string;
   high: string;
-  hint?: string;
+  hint: string;
+  meaning: string;
+  polarity: 'benefit' | 'intensity';
   averageKey: keyof Pick<Course, 'averageLearning' | 'averageWorkload' | 'averageExamDifficulty' | 'averageGradingStandard' | 'averageAttendanceFrequency'>;
 }> = [
-  { key: 'learningScore', label: '學習收穫', low: '較少', high: '很多', hint: '越高代表越能學到東西', averageKey: 'averageLearning' },
-  { key: 'workloadScore', label: '作業量', low: '很少', high: '很多', hint: '越高代表作業越多', averageKey: 'averageWorkload' },
-  { key: 'examDifficultyScore', label: '考試難度', low: '較容易', high: '很困難', hint: '越高代表考試越難', averageKey: 'averageExamDifficulty' },
-  { key: 'gradingStandardScore', label: '給分標準', low: '較嚴格', high: '較寬鬆', hint: '越高代表給分越寬鬆', averageKey: 'averageGradingStandard' },
-  { key: 'attendanceFrequencyScore', label: '點名頻率', low: '很少', high: '很頻繁', hint: '越高代表越常點名', averageKey: 'averageAttendanceFrequency' },
+  {
+    key: 'learningScore', label: '學習收穫', low: '幾乎沒學到', high: '學到很多',
+    hint: '越高代表越能學到東西', polarity: 'benefit',
+    meaning: '分數越高，代表這門課帶來的知識與能力收穫越紮實；0 分是整學期幾乎沒學到東西，100 分是收穫非常多。',
+    averageKey: 'averageLearning',
+  },
+  {
+    key: 'workloadScore', label: '作業量', low: '幾乎沒作業', high: '作業非常多',
+    hint: '越高代表作業越多', polarity: 'intensity',
+    meaning: '分數越高，代表作業與報告越多、越花時間；0 分是幾乎不用交作業，100 分是每週都被作業追著跑。',
+    averageKey: 'averageWorkload',
+  },
+  {
+    key: 'examDifficultyScore', label: '考試難度', low: '考試很簡單', high: '考試很困難',
+    hint: '越高代表考試越難', polarity: 'intensity',
+    meaning: '分數越高，代表考試越難、越不容易拿分；0 分是照著上課內容就能寫完，100 分是準備很久還是很難應付。',
+    averageKey: 'averageExamDifficulty',
+  },
+  {
+    key: 'gradingStandardScore', label: '給分標準', low: '給分很嚴格', high: '給分很甜',
+    hint: '越高代表給分越寬鬆', polarity: 'benefit',
+    meaning: '分數越高，代表老師給分越寬鬆（越甜）；0 分是給分非常嚴格，100 分是只要有做就給得很大方。',
+    averageKey: 'averageGradingStandard',
+  },
+  {
+    key: 'attendanceFrequencyScore', label: '點名頻率', low: '幾乎不點名', high: '幾乎堂堂點名',
+    hint: '越高代表越常點名', polarity: 'intensity',
+    meaning: '分數越高，代表越常點名、缺席越容易被記錄；0 分是整學期幾乎不點名，100 分是幾乎每堂都點。',
+    averageKey: 'averageAttendanceFrequency',
+  },
 ];
 
 function toneForDepartment(department: string) {
@@ -305,6 +332,23 @@ export function CourseDirectory() {
         </div>
       </section>
 
+      <section className="rating-legend" aria-label="五項評分說明">
+        <div className="rating-legend-heading">
+          <h2>五項評分越高代表什麼</h2>
+          <p>每項都是 0～100 分，五項各自獨立顯示，不做加總、也不合併成單一分數。</p>
+        </div>
+        <dl>
+          {ratingDimensions.map((dimension) => <div key={`legend-${dimension.key}`}>
+            <dt>{dimension.label}<em data-polarity={dimension.polarity}>{dimension.polarity === 'benefit' ? '越高越有利' : '越高越吃重'}</em></dt>
+            <dd>
+              <p>{dimension.meaning}</p>
+              <small><span>0 分 · {dimension.low}</span><span>100 分 · {dimension.high}</span></small>
+            </dd>
+          </div>)}
+        </dl>
+        <p className="rating-legend-note">高分不等於好課：只有「學習收穫」與「給分標準」是分數越高對修課者越有利；「作業量」「考試難度」「點名頻率」越高只代表這門課在該面向越吃重，適不適合仍要看你自己的修課目標。</p>
+      </section>
+
       <section className="professor-controls" aria-label="課程篩選">
         <label><span>學校</span><select value={schoolId} onChange={(event) => selectSchool(event.target.value)}><option value="">請選擇學校</option>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="course-search-field"><span><Search size={13} />搜尋課程、老師或系所</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={schoolId ? '輸入關鍵字' : '請先選擇學校'} disabled={!schoolId} /></label>
@@ -326,14 +370,15 @@ export function CourseDirectory() {
           <dl className="professor-dimensions">
             {ratingDimensions.map((dimension) => {
               const value = course[dimension.averageKey];
-              return <div key={dimension.key}><dt>{dimension.label}</dt><dd><span className="dimension-track" aria-hidden="true"><i style={{ width: `${value ?? 0}%` }} /></span><strong>{value === null ? '—' : value.toFixed(1)}</strong></dd></div>;
+              return <div key={dimension.key}><dt title={dimension.meaning}>{dimension.label}</dt><dd><span className="dimension-track" aria-hidden="true"><i style={{ width: `${value ?? 0}%` }} /></span><strong>{value === null ? '—' : value.toFixed(1)}</strong></dd></div>;
             })}
           </dl>
           {ratingTargetId !== course.id && <button className="open-rating-button" type="button" onClick={() => openRating(course)}>評這門課 <span aria-hidden="true">→</span></button>}
           {ratingTargetId === course.id && <form className="rating-form" onSubmit={(event) => void submitRating(event, course)}>
             <div className="rating-form-heading"><span>你的五項評分</span><button className="rating-close" type="button" onClick={() => setRatingTargetId('')} aria-label="關閉評分"><X size={15} /></button></div>
             {ratingDimensions.map((dimension) => <fieldset key={dimension.key}>
-              <legend>{dimension.label}{dimension.hint && <small>{dimension.hint}</small>}</legend>
+              <legend>{dimension.label}<small>{dimension.hint}</small></legend>
+              <p className="dimension-meaning">{dimension.meaning}</p>
               <div className="dimension-scale">
                 <input type="range" min="0" max="100" step="1" value={scores[dimension.key]} aria-label={`${course.name}的${dimension.label}分數`} aria-valuetext={`${scores[dimension.key]} 分`} onChange={(event) => updateScore(dimension.key, event.target.value)} />
                 <label><span className="sr-only">{dimension.label}分數</span><input type="number" inputMode="numeric" min="0" max="100" step="1" value={scores[dimension.key]} onChange={(event) => updateScore(dimension.key, event.target.value)} /><span>分</span></label>
