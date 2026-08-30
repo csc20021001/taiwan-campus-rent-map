@@ -1698,6 +1698,79 @@ def write_completion_migrations(courses: list[dict], checked_at: str, target_sch
     return files
 
 
+def overlay_nsysu_supplement(report_payload: dict) -> None:
+    """Overlay the separately validated NSYSU completion report when present.
+
+    The base importer does not automate NSYSU's CAPTCHA form.  A dedicated
+    importer uses the separate public OPEN_CRS course-handbook reports.  This
+    fail-closed composer prevents a later base refresh from resurrecting the
+    older restricted/zero row after that supplemental batch has been verified.
+    """
+    detail_path = DB / "nsysu-course-report.generated.json"
+    if not detail_path.is_file():
+        return
+    try:
+        detail = json.loads(detail_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    expected_terms = [f"{year}-{semester}" for year, semester in TERM_PAIRS]
+    migrations = detail.get("migrationFiles") or []
+    valid = (
+        detail.get("status") == "imported"
+        and detail.get("policy", {}).get("officialUniversityDomainsOnly") is True
+        and detail.get("policy", {}).get("captchaBypassed") is False
+        and detail.get("policy", {}).get("failClosedResponseValidation") is True
+        and detail.get("availableTerms") == expected_terms
+        and detail.get("missingTerms") == []
+        and detail.get("failedDepartmentQueries") == []
+        and int(detail.get("unitCatalogCount") or 0) >= 300
+        and int(detail.get("successfulDepartmentQueries") or 0)
+        == int(detail.get("unitCatalogCount") or 0) * len(expected_terms)
+        and int(detail.get("verifiedCourses") or 0) > 0
+        and int(detail.get("publishedCourseInstructorCards") or 0)
+        >= int(detail.get("verifiedCourses") or 0)
+        and migrations
+        and all((ROOT / "drizzle" / name).is_file() for name in migrations)
+    )
+    if not valid:
+        return
+
+    replacement = {
+        "status": "imported",
+        "officialIndex": detail["officialIndex"],
+        "note": (
+            "透過校方公開 OPEN_CRS 課程手冊查詢補入；"
+            "未自動化或繞過學生歷史查詢的人工驗證碼"
+        ),
+        "universityId": "nsysu",
+        "checkedAt": detail["checkedAt"],
+        "parsedOfferings": detail["parsedOfferings"],
+        "verifiedOfferings": detail["verifiedCourses"],
+        "verifiedCourses": detail["verifiedCourses"],
+        "publishedCourseInstructorCards": detail["publishedCourseInstructorCards"],
+        "rejectedWithoutCurrentFaculty": detail["rejectedWithoutCurrentInstructor"],
+        "availableTerms": detail["availableTerms"],
+        "missingTerms": detail["missingTerms"],
+        "activeFacultyCount": detail["activeFacultyPageCount"],
+        "activeInstructorCount": detail["activeInstructorCount"],
+        "activeCourseReportEvidenceCount": detail["activeCourseReportEvidenceCount"],
+        "detailReport": "db/nsysu-course-report.generated.json",
+        "supplementalMigrationFiles": migrations,
+    }
+    report_payload["schools"] = [
+        replacement if school.get("universityId") == "nsysu" else school
+        for school in report_payload["schools"]
+    ]
+    base_count = int(report_payload["courseCount"])
+    report_payload["baseImporterCourseCount"] = base_count
+    report_payload["nsysuSupplementalCourseCount"] = detail["verifiedCourses"]
+    report_payload["nsysuSupplementalInstructorCount"] = detail["publishedCourseInstructorCards"]
+    report_payload["courseCount"] = base_count + detail["verifiedCourses"]
+    report_payload["publishedCourseCount"] = report_payload["courseCount"]
+    report_payload["nsysuMigrationFiles"] = migrations
+    report_payload["supplementalCheckedAt"] = detail["checkedAt"]
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     active = load_active_faculty()
@@ -1772,6 +1845,7 @@ def main() -> None:
         checked_at,
         ("nthu", "nycu", "nchu", "ntust"),
     )
+    overlay_nsysu_supplement(report_payload)
     (DB / "course-import-report.generated.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"courses": len(courses), "bySchool": {school: len(values) for school, values in by_school.items()}}, ensure_ascii=False), flush=True)
 

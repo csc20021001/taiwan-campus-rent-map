@@ -18,6 +18,7 @@
     "professors:extract": "node scripts/extract-official-professor-candidates.mjs",
     "professors:merge": "node scripts/merge-official-professor-candidates.mjs && node scripts/build-professor-seed.mjs",
     "courses:official": "python scripts/import-official-course-history.py",
+    "courses:nsysu": "python scripts/import-nsysu-official-course-history.py",
     "courses:place-names": "python scripts/import-place-name-universities.py",
     "courses:links-audit": "node scripts/audit-course-links.mjs",
     "seed:build": "node scripts/build-professor-seed.mjs"

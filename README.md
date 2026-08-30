@@ -4,8 +4,8 @@
 
 ## 功能
 
-- 學校選單共 42 所大學，其中 38 所已載入校方官方課表的課程與授課教師，合計約 20 萬門課程、42 萬筆教師授課紀錄。
-- 尚未收錄課程的 4 所學校與原因記錄在 `db/place-name-course-report.generated.json` 與 `db/course-import-report.generated.json`：中山（官方歷史查詢需人工驗證碼）、臺藝大（全校課表需帳密登入）、空大（公開課程頁不提供授課教師）、高餐大（`classic.nkuht.edu.tw` 於稽核期間無法連線）。這些學校不以第三方網站或推測資料補齊。
+- 學校選單共 42 所大學，其中 39 所已載入校方官方課表的課程與授課教師，合計約 20 萬門課程、42 萬筆教師授課紀錄。
+- 尚未收錄課程的 3 所學校與原因記錄在 `db/place-name-course-report.generated.json`：臺藝大（全校課表需帳密登入）、空大（公開課程頁不提供授課教師）、高餐大（`classic.nkuht.edu.tw` 於稽核期間無法連線）。這些學校不以第三方網站或推測資料補齊。
 - 課程以「課程＋授課教師」為評分卡；同一門課由多位教師授課時，各教師分開顯示與統計。
 - 顯示教師全名、官方課程頁與官方系所網站；官方資料只採各校公開網站。
 - 依學習收穫、作業量、考試難度、給分標準、點名頻率五項給予 0～100 分；每項都清楚標示高分代表的方向。
@@ -109,6 +109,7 @@ npm run dev
 ## 官方課程匯入
 
 - `scripts/import-official-course-history.py`：只從各校官方 HTTPS 網域建立歷史課程與來源快照。
+- `scripts/import-nsysu-official-course-history.py`：從中山大學公開 `OPEN_CRS` 課程手冊逐一驗證完整系所目錄，匯入 106-1 至 115-1；不自動化或繞過學生歷史查詢的人工驗證碼。完整稽核記錄在 `db/nsysu-course-report.generated.json`。
 - `scripts/import-place-name-universities.py`：補入全臺地名國立／市立大學的公開課表；以最新公開課表核對仍在校教師，並把受驗證碼或登入限制的學校明載於 `db/place-name-course-report.generated.json`。
   - `--only <學校代碼,…>` 只重跑指定學校，`--batch-id <批次名>` 指定新的 migration 批次；已提交的批次不會被覆寫，新批次的 `DELETE` 只作用在該批次真正匯入的學校，因此不會刪掉前一批次已發布的課程。
   - 課表把中文名稱、英文譯名與合班註記排在同一格時，只發布校方第一行的中文課名（`official_course_name`）。
@@ -126,6 +127,7 @@ npm run professors:faculty-pages
 npm run professors:extract
 npm run professors:merge
 npm run courses:official
+npm run courses:nsysu
 npm run courses:place-names
 ```
 
