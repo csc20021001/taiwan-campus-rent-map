@@ -217,7 +217,7 @@ test('course interface presents five editable 0–100 controls without a combine
   assert.doesNotMatch(source, /\[1, 2, 3, 4, 5\]/);
 });
 
-test('every rating dimension states what a higher score means', () => {
+test('rating directions stay complete but detailed guidance is collapsed by default', () => {
   const source = readFileSync(new URL('../app/courses/course-directory.tsx', import.meta.url), 'utf8');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   const dimensions = [
@@ -241,7 +241,16 @@ test('every rating dimension states what a higher score means', () => {
     /<legend>\{dimension\.label\}<small>\{dimension\.hint\}<\/small><\/legend>/,
   );
   assert.match(source, /五項評分越高代表什麼/);
-  assert.match(source, /className="rating-legend"/);
+  assert.match(source, /<details className="rating-legend">/);
+  assert.match(source, /<summary>/);
+  assert.match(source, /rating-legend-open-label">查看詳情/);
+  assert.match(source, /rating-legend-close-label">收起詳情/);
+  assert.doesNotMatch(source, /<details className="rating-legend"[^>]*\sopen(?:\s|=|>)/);
+  const legendStart = source.indexOf('<details className="rating-legend">');
+  const summaryEnd = source.indexOf('</summary>', legendStart);
+  const detailsEnd = source.indexOf('</details>', summaryEnd);
+  assert.ok(legendStart >= 0 && summaryEnd > legendStart && detailsEnd > summaryEnd);
+  assert.ok(source.indexOf('<dl>', summaryEnd) < detailsEnd, '詳細說明必須收在 disclosure 內');
   assert.match(source, /dimension-meaning/);
   assert.match(source, /高分不等於好課/);
   assert.match(readme, /## 五項評分越高代表什麼/);

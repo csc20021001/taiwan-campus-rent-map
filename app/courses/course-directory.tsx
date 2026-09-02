@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ExternalLink, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
 import { universities } from '@/app/data';
 
 type Course = {
@@ -332,22 +332,32 @@ export function CourseDirectory() {
         </div>
       </section>
 
-      <section className="rating-legend" aria-label="五項評分說明">
-        <div className="rating-legend-heading">
-          <h2>五項評分越高代表什麼</h2>
+      <details className="rating-legend">
+        <summary>
+          <span className="rating-legend-heading">
+            <strong>五項評分越高代表什麼</strong>
+            <small>0～100 分，五項各自獨立</small>
+          </span>
+          <span className="rating-legend-toggle">
+            <span className="rating-legend-open-label">查看詳情</span>
+            <span className="rating-legend-close-label">收起詳情</span>
+            <ChevronDown size={17} aria-hidden="true" />
+          </span>
+        </summary>
+        <div className="rating-legend-content">
           <p>每項都是 0～100 分，五項各自獨立顯示，不做加總、也不合併成單一分數。</p>
+          <dl>
+            {ratingDimensions.map((dimension) => <div key={`legend-${dimension.key}`}>
+              <dt>{dimension.label}<em data-polarity={dimension.polarity}>{dimension.polarity === 'benefit' ? '越高越有利' : '越高越吃重'}</em></dt>
+              <dd>
+                <p>{dimension.meaning}</p>
+                <small><span>0 分 · {dimension.low}</span><span>100 分 · {dimension.high}</span></small>
+              </dd>
+            </div>)}
+          </dl>
+          <p className="rating-legend-note">高分不等於好課：只有「學習收穫」與「給分標準」是分數越高對修課者越有利；「作業量」「考試難度」「點名頻率」越高只代表這門課在該面向越吃重，適不適合仍要看你自己的修課目標。</p>
         </div>
-        <dl>
-          {ratingDimensions.map((dimension) => <div key={`legend-${dimension.key}`}>
-            <dt>{dimension.label}<em data-polarity={dimension.polarity}>{dimension.polarity === 'benefit' ? '越高越有利' : '越高越吃重'}</em></dt>
-            <dd>
-              <p>{dimension.meaning}</p>
-              <small><span>0 分 · {dimension.low}</span><span>100 分 · {dimension.high}</span></small>
-            </dd>
-          </div>)}
-        </dl>
-        <p className="rating-legend-note">高分不等於好課：只有「學習收穫」與「給分標準」是分數越高對修課者越有利；「作業量」「考試難度」「點名頻率」越高只代表這門課在該面向越吃重，適不適合仍要看你自己的修課目標。</p>
-      </section>
+      </details>
 
       <section className="professor-controls" aria-label="課程篩選">
         <label><span>學校</span><select value={schoolId} onChange={(event) => selectSchool(event.target.value)}><option value="">請選擇學校</option>{universities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

@@ -202,19 +202,64 @@ a:focus-visible {
 
 .rating-legend {
   margin: 0 clamp(20px, 3vw, 34px) 24px;
-  padding: 20px 22px 18px;
+  padding: 0 22px;
   background: #f7f1ec;
   border-radius: 22px;
+  overflow: clip;
 }
-.rating-legend-heading h2 {
-  margin: 0;
+.rating-legend > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 76px;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.rating-legend > summary::-webkit-details-marker { display: none; }
+.rating-legend > summary:focus-visible {
+  outline: 3px solid rgba(205, 100, 78, .28);
+  outline-offset: 5px;
+  border-radius: 12px;
+}
+.rating-legend-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.rating-legend-heading strong {
   color: var(--ink);
   font-size: 15px;
   font-weight: 900;
   letter-spacing: -.01em;
 }
-.rating-legend-heading p {
-  margin: 5px 0 0;
+.rating-legend-heading small {
+  color: var(--soft-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.rating-legend-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--coral-dark);
+  font-size: 12px;
+  font-weight: 900;
+}
+.rating-legend-toggle svg { transition: transform .2s ease; }
+.rating-legend-close-label { display: none; }
+.rating-legend[open] .rating-legend-open-label { display: none; }
+.rating-legend[open] .rating-legend-close-label { display: inline; }
+.rating-legend[open] .rating-legend-toggle svg { transform: rotate(180deg); }
+.rating-legend-content {
+  padding: 16px 0 18px;
+  border-top: 1px solid rgba(96, 75, 65, .12);
+}
+.rating-legend-content > p:first-child {
+  margin: 0;
   color: var(--soft-muted);
   font-size: 12px;
   line-height: 1.6;
@@ -223,7 +268,7 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 12px;
-  margin: 15px 0 0;
+  margin: 14px 0 0;
 }
 .rating-legend dl > div {
   min-width: 0;
@@ -779,7 +824,8 @@ a:focus-visible {
   .professor-hero h1 { font-size: clamp(34px, 11vw, 48px); }
   .professor-hero-copy > strong { font-size: 14px; }
   .professor-controls { grid-template-columns: 1fr; padding: 0 18px 24px; }
-  .rating-legend { margin: 0 18px 20px; padding: 18px 16px 16px; border-radius: 20px; }
+  .rating-legend { margin: 0 18px 20px; padding: 0 16px; border-radius: 20px; }
+  .rating-legend > summary { min-height: 70px; gap: 12px; }
   .rating-legend dl { grid-template-columns: 1fr; }
   .professor-controls label { min-height: 60px; }
   .professor-message { margin: -6px 18px 20px; }
