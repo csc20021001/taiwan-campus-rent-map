@@ -11,6 +11,7 @@ const styles = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf
 
 test('AdSense verification uses the real publisher and publishes the authorized-seller line', () => {
   assert.match(config, /ca-pub-7452457835531443/);
+  assert.match(config, /1381740675/);
   assert.match(layout, /google-adsense-account/);
   assert.match(layout, /<head>[\s\S]*pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/);
   assert.match(adsTxt, /ADSENSE_PUBLISHER_ID/);
@@ -22,6 +23,7 @@ test('course directory reserves a responsive, clearly labelled ad placement', ()
   assert.match(directory, /<AdSenseSlot \/>/);
   assert.match(slot, /className="ad-slot ad-placeholder"/);
   assert.match(slot, /<span>廣告<\/span>/);
+  assert.match(slot, /data-ad-slot=\{ADSENSE_SLOT\}/);
   assert.match(slot, /data-full-width-responsive="true"/);
   assert.match(styles, /\.ad-slot \{[\s\S]*min-height: 112px/);
   assert.match(styles, /\.ad-placeholder/);

@@ -6,4 +6,4 @@ export const ADSENSE_CLIENT = /^ca-pub-\d+$/.test(configuredClient)
   ? configuredClient
   : 'ca-pub-7452457835531443';
 export const ADSENSE_PUBLISHER_ID = ADSENSE_CLIENT.replace(/^ca-/, '');
-export const ADSENSE_SLOT = /^\d+$/.test(configuredSlot) ? configuredSlot : '';
+export const ADSENSE_SLOT = /^\d+$/.test(configuredSlot) ? configuredSlot : '1381740675';

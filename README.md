@@ -87,7 +87,7 @@ GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 ```
 
-AdSense 的公開 publisher ID 已有正式預設值；網站會載入官方驗證程式碼並提供 `/ads.txt`。課程頁的回應式版位在廣告單元核發前維持標示為「廣告」的空白預留區，取得數字型 ad-unit slot 後再設定 `NEXT_PUBLIC_ADSENSE_SLOT`。
+AdSense 的公開 publisher ID 與「WZUNAA 課程列表」回應式廣告單元 ID 已有正式預設值；網站會載入官方驗證程式碼、在課程頁顯示該廣告單元，並提供 `/ads.txt`。如需切換到其他公開 ID，可透過 `NEXT_PUBLIC_ADSENSE_CLIENT` 與 `NEXT_PUBLIC_ADSENSE_SLOT` 覆寫。
 
 正式 Google OAuth redirect URI：
 
