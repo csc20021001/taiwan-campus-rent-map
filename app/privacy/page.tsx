@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         <Link className="legal-back" href="/courses">← 返回課程評分</Link>
         <p className="legal-kicker">WZUNAA · COURSE REVIEWS TAIWAN</p>
         <h1>隱私權政策</h1>
-        <p className="legal-updated">最後更新：2026 年 8 月 29 日</p>
+        <p className="legal-updated">最後更新：2026 年 9 月 2 日</p>
 
         <section>
           <h2>個資蒐集者與聯絡方式</h2>
@@ -51,7 +51,8 @@ export default function PrivacyPage() {
 
         <section>
           <h2>Google 登入、服務供應商與廣告</h2>
-          <p>Google 登入由 Google 驗證。網站使用 Cloudflare 提供網站、資料庫與安全服務，並可能使用 Google 提供登入及廣告服務。第三方可能依其服務條款與隱私政策處理 IP 位址、Cookie、裝置及使用資訊；若啟用個人化廣告或非必要追蹤，本站會依適用法令提供相應告知與選擇。</p>
+          <p>Google 登入由 Google 驗證。網站使用 Cloudflare 提供網站、資料庫與安全服務，並使用 Google AdSense 提供廣告。Google 及其合作夥伴可能依其服務條款與隱私政策處理 IP 位址、Cookie、裝置識別資訊、瀏覽器資訊、概略位置及廣告互動資料，以投放、衡量、限制與保護廣告；廣告是否個人化會依你的地區、同意狀態及設定而異。</p>
+          <p>你可以閱讀 <a href="https://policies.google.com/technologies/partner-sites">Google 對合作夥伴網站資料使用方式的說明</a>，並在 <a href="https://adssettings.google.com/">Google 廣告設定</a>管理選擇，也可以透過瀏覽器限制或刪除 Cookie。本站依適用法令提供必要的告知與選擇。</p>
         </section>
 
         <section>

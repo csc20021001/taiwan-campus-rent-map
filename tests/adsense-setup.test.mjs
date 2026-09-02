@@ -13,7 +13,9 @@ test('AdSense verification uses the real publisher and publishes the authorized-
   assert.match(config, /ca-pub-7452457835531443/);
   assert.match(config, /1381740675/);
   assert.match(layout, /google-adsense-account/);
-  assert.match(layout, /<head>[\s\S]*pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/);
+  assert.doesNotMatch(layout, /pagead2\.googlesyndication\.com/);
+  assert.match(slot, /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/);
+  assert.match(slot, /strategy="afterInteractive"/);
   assert.match(adsTxt, /ADSENSE_PUBLISHER_ID/);
   assert.match(adsTxt, /google\.com, \$\{ADSENSE_PUBLISHER_ID\}, DIRECT, f08c47fec0942fa0/);
 });
