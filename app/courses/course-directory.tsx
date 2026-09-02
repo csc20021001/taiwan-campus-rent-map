@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ExternalLink, GraduationCap, LogIn, Plus, Search, ShieldCheck, Star, X } from 'lucide-react';
+import { AdSenseSlot } from '@/app/adsense';
 import { universities } from '@/app/data';
 
 type Course = {
@@ -365,6 +366,8 @@ export function CourseDirectory() {
         <label><span>系所</span><select value={department} onChange={(event) => setDepartment(event.target.value)} disabled={!schoolId}><option value="">{schoolId ? `全部系所（${departmentsLoading ? '…' : departments.length}）` : '請先選擇學校'}</option>{departmentsByCollege.map(([college, units]) => <optgroup label={college} key={college}>{units.map((item) => <option value={item.name} key={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
         <label><span>學期</span><select value={semester} onChange={(event) => setSemester(event.target.value)} disabled={!schoolId}><option value="">{schoolId ? '全部學期' : '請先選擇學校'}</option><option value="1">上學期</option><option value="2">下學期</option></select></label>
       </section>
+
+      <AdSenseSlot />
 
       {message && <p className={`professor-message ${message === '評分已更新。' || message === '課程已新增。' ? 'is-success' : ''}`} role="status" aria-live="polite">{message}</p>}
 

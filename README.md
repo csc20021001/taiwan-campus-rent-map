@@ -87,6 +87,8 @@ GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 ```
 
+AdSense 的公開 publisher ID 已有正式預設值；網站會載入官方驗證程式碼並提供 `/ads.txt`。課程頁的回應式版位在廣告單元核發前維持標示為「廣告」的空白預留區，取得數字型 ad-unit slot 後再設定 `NEXT_PUBLIC_ADSENSE_SLOT`。
+
 正式 Google OAuth redirect URI：
 
 ```text

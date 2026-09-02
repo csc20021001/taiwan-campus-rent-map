@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { ADSENSE_CLIENT, ADSENSE_SLOT } from '@/app/adsense-config';
 
 declare global {
   interface Window {
@@ -8,9 +9,7 @@ declare global {
   }
 }
 
-const client = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? '';
-const slot = process.env.NEXT_PUBLIC_ADSENSE_SLOT ?? '';
-const isConfigured = /^ca-pub-\d+$/.test(client) && /^\d+$/.test(slot);
+const isConfigured = Boolean(ADSENSE_SLOT);
 
 export function AdSenseSlot() {
   const initialized = useRef(false);
@@ -39,8 +38,8 @@ export function AdSenseSlot() {
       <ins
         className="adsbygoogle"
         style={{ display: 'block' }}
-        data-ad-client={client}
-        data-ad-slot={slot}
+        data-ad-client={ADSENSE_CLIENT}
+        data-ad-slot={ADSENSE_SLOT}
         data-ad-format="auto"
         data-full-width-responsive="true"
       />
